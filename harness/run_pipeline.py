@@ -169,7 +169,7 @@ def main():
         {"brief": intake["brief"], "dossier": (dossier or {}).get("dossier")},
         'Write the full deliverable per the brief. Return JSON: {"draft": {"title", "content" '
         '(the complete deliverable in markdown, meeting the brief\'s length), "word_count"}}',
-        16000,
+        4500,
     )
 
     review = None
@@ -200,7 +200,7 @@ def main():
              "revision_round": round_num + 1},
             'Revise the draft to resolve every issue. Return JSON: {"draft": {"title", "content" '
             '(complete revised deliverable in markdown), "word_count"}}',
-            16000,
+            4500,
         )
 
     if not LOG.get("escalated"):
