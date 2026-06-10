@@ -45,7 +45,12 @@ handoffs/        ← Session export dumps from /context-dump
 | `/agent-review`  | Audit an agent for safety and completeness     |
 | `/context-dump`  | Export session as a structured handoff doc     |
 
-## Key Rules for Claude
+## Persistent Memory
+- Project memory lives in `.claude/memory/` (project-local, committed) — NOT in the user-level `~/.claude/projects/<slug>/memory/` store
+- At session start, read `.claude/memory/MEMORY.md` for the index, then recall individual memory files as needed
+- Write all new memories to `.claude/memory/` and add an index line to its MEMORY.md; never write project memories to the user-level store
+
+# Key Rules for Claude
 - Never hardcode API keys, tokens, or secrets in any file — always reference environment variables loaded from `.env`
 - Never commit `.env`; keep `.env.example` updated whenever a new variable is added
 - Never scaffold an agent without a spec in `specs/`
