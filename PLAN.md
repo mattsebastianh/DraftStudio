@@ -87,4 +87,4 @@ All 5 agents reviewed (`reviews/<AgentName>_review.md`), all Critical/High findi
 - Add per-dimension quality scores to ReviewAgent (not just composite)
 - Add `client_id` propagation through all send tools
 - Multi-channel delivery support in DispatchAgent
-- Live execution test with real model invocations via the Groq API
+- ~~Live execution test with real model invocations via the Groq API~~ ✅ Done 2026-06-10 — `harness/run_pipeline.py`, report in `tests/live_pipeline_test_1.md` (score 92/100)
