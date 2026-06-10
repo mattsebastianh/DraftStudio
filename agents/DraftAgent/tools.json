@@ -1,0 +1,234 @@
+[
+  {
+    "name": "parse_brief",
+    "description": "Parse a structured brief into discrete writing requirements including audience, tone, length, key points, and format.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "brief": {
+          "type": "object",
+          "description": "The structured brief to parse",
+          "properties": {
+            "topic": { "type": "string" },
+            "audience": { "type": "string" },
+            "tone": { "type": "string" },
+            "length": { "type": "string" },
+            "key_points": { "type": "array", "items": { "type": "string" } },
+            "format": { "type": "string" }
+          },
+          "required": ["topic"]
+        }
+      },
+      "required": ["brief"]
+    }
+  },
+  {
+    "name": "outline_content",
+    "description": "Generate a structured outline before drafting, ensuring logical flow and requirement coverage.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "requirements": {
+          "type": "object",
+          "description": "Parsed requirements from parse_brief",
+          "properties": {
+            "topic": { "type": "string" },
+            "key_points": { "type": "array", "items": { "type": "string" } },
+            "audience": { "type": "string" },
+            "tone": { "type": "string" }
+          },
+          "required": ["topic"]
+        },
+        "research_findings": {
+          "type": "array",
+          "description": "Optional research findings to incorporate into outline",
+          "items": {
+            "type": "object",
+            "properties": {
+              "claim": { "type": "string" },
+              "confidence": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "required": ["requirements"]
+    }
+  },
+  {
+    "name": "draft_deliverable",
+    "description": "Produce a full draft from outline and research inputs.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "outline": {
+          "type": "string",
+          "description": "The structured outline to draft from"
+        },
+        "research": {
+          "type": "object",
+          "description": "Optional research dossier with findings and sources",
+          "properties": {
+            "findings": { "type": "array" },
+            "gaps": { "type": "array" },
+            "confidence": { "type": "integer" }
+          }
+        },
+        "revision_notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional list of issues to address from ReviewAgent"
+        }
+      },
+      "required": ["outline"]
+    }
+  },
+  {
+    "name": "format_output",
+    "description": "Format the draft in the requested output format (markdown, plain text, structured sections).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft_content": {
+          "type": "string",
+          "description": "The draft text to format"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["markdown", "plain_text", "structured_sections"],
+          "description": "The output format to apply"
+        }
+      },
+      "required": ["draft_content", "format"]
+    }
+  },
+  {
+    "name": "receive_from_ResearchAgent",
+    "description": "Receive a research dossier from ResearchAgent to ground the draft with sourced findings.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "dossier": {
+          "type": "object",
+          "description": "Research dossier from ResearchAgent",
+          "properties": {
+            "topic": { "type": "string" },
+            "findings": { "type": "array" },
+            "gaps": { "type": "array" },
+            "confidence": { "type": "integer" },
+            "sources": { "type": "array" }
+          },
+          "required": ["topic", "findings", "gaps", "confidence", "sources"]
+        }
+      },
+      "required": ["dossier"]
+    }
+  },
+  {
+    "name": "send_to_ReviewAgent",
+    "description": "Submit a completed draft to ReviewAgent for quality gate evaluation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "type": "object",
+          "description": "The completed draft to submit for review",
+          "properties": {
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "format": { "type": "string" },
+            "unsupported": { "type": "array", "items": { "type": "string" } },
+            "word_count": { "type": "integer" }
+          },
+          "required": ["title", "content"]
+        },
+        "brief": {
+          "type": "object",
+          "description": "Original brief for requirement comparison"
+        },
+        "revision_round": {
+          "type": "integer",
+          "description": "Current revision cycle (0 = first submission)"
+        }
+      },
+      "required": ["draft", "brief", "revision_round"]
+    }
+  },
+  {
+    "name": "receive_from_ReviewAgent",
+    "description": "Receive revision requests from ReviewAgent with specific issues to address.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft_title": {
+          "type": "string",
+          "description": "Title of the draft being revised"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "severity": { "type": "string" },
+              "category": { "type": "string" },
+              "description": { "type": "string" },
+              "suggested_fix": { "type": "string" }
+            }
+          },
+          "description": "Issues to address in the revision"
+        },
+        "revision_round": {
+          "type": "integer",
+          "description": "Current revision cycle number"
+        }
+      },
+      "required": ["draft_title", "issues", "revision_round"]
+    }
+  },
+  {
+    "name": "send_to_ResearchAgent",
+    "description": "Request a research investigation from ResearchAgent when the topic requires sourced facts not available in the brief.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "The topic requiring investigation"
+        },
+        "depth": {
+          "type": "string",
+          "enum": ["quick", "deep"],
+          "description": "Research depth level"
+        },
+        "focus_areas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific areas that need research grounding"
+        }
+      },
+      "required": ["topic"]
+    }
+  },
+  {
+    "name": "receive_from_IntakeAgent",
+    "description": "Receive a structured brief from IntakeAgent for drafting.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "brief": {
+          "type": "object",
+          "description": "Structured brief from IntakeAgent",
+          "properties": {
+            "topic": { "type": "string" },
+            "audience": { "type": "string" },
+            "tone": { "type": "string" },
+            "length": { "type": "string" },
+            "key_points": { "type": "array", "items": { "type": "string" } },
+            "format": { "type": "string" }
+          },
+          "required": ["topic"]
+        }
+      },
+      "required": ["brief"]
+    }
+  }
+]

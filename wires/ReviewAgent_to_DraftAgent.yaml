@@ -1,0 +1,63 @@
+wire:
+  id: ReviewAgent_to_DraftAgent
+  version: "1.0"
+  created: 2026-04-13
+
+sender:
+  agent: ReviewAgent
+  trigger_condition: "Quality review found issues requiring revision (status = revision_required)"
+  trigger_event: revision_required
+
+receiver:
+  agent: DraftAgent
+  entry_point: receive_from_ReviewAgent
+
+message_schema:
+  type: object
+  required:
+    - draft_title
+    - issues
+    - revision_round
+  properties:
+    draft_title:
+      type: string
+      description: "Title of the draft being sent back for revision"
+      example: "EU AI Act Compliance Guide"
+    issues:
+      type: array
+      description: "Specific issues to address in the revision"
+      items:
+        type: object
+        properties:
+          severity:
+            type: string
+            enum: ["critical", "high", "medium", "low"]
+          category:
+            type: string
+            example: "completeness"
+          description:
+            type: string
+            example: "Missing documentation requirements section"
+          suggested_fix:
+            type: string
+            example: "Add a dedicated section covering required documentation"
+    revision_round:
+      type: integer
+      description: "Current revision cycle number"
+      example: 1
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire ReviewAgent_to_DraftAgent failed after 3 retries"
+
+metadata:
+  description: "Sends revision requests from ReviewAgent back to DraftAgent with specific issues to address"
+  data_sensitivity: internal

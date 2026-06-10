@@ -1,0 +1,21 @@
+# DraftStudio .gitignore
+
+# Personal local notes
+CLAUDE.local.md
+
+# Claude-code activity log (machine-generated)
+.claude/activity.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Node (if any tooling is added later)
+node_modules/
+.env
+.env.local
+
+# Python (if any tooling is added later)
+__pycache__/
+*.pyc
+.venv/

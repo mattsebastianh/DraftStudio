@@ -1,0 +1,149 @@
+[
+  {
+    "name": "parse_request",
+    "description": "Parse raw client input into structured components: topic, intent, constraints, output preferences, and deadline.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "raw_request": {
+          "type": "string",
+          "description": "The client's raw request in plain text"
+        },
+        "context": {
+          "type": "object",
+          "description": "Optional prior conversation or revision history",
+          "properties": {
+            "previous_brief": { "type": "object" },
+            "revision_feedback": { "type": "string" }
+          }
+        }
+      },
+      "required": ["raw_request"]
+    }
+  },
+  {
+    "name": "classify_work",
+    "description": "Classify the request type and determine which agents are needed and in what sequence.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "parsed_request": {
+          "type": "object",
+          "description": "Structured output from parse_request",
+          "properties": {
+            "topic": { "type": "string" },
+            "intent": { "type": "string" },
+            "needs_research": { "type": "boolean" },
+            "needs_drafting": { "type": "boolean" }
+          },
+          "required": ["topic"]
+        }
+      },
+      "required": ["parsed_request"]
+    }
+  },
+  {
+    "name": "route_task",
+    "description": "Route the structured brief to the appropriate agent(s) in the correct sequence, respecting dependency order.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "brief": {
+          "type": "object",
+          "description": "The structured brief to route",
+          "properties": {
+            "topic": { "type": "string" },
+            "audience": { "type": "string" },
+            "tone": { "type": "string" },
+            "length": { "type": "string" },
+            "key_points": { "type": "array", "items": { "type": "string" } },
+            "format": { "type": "string" }
+          },
+          "required": ["topic"]
+        },
+        "routing_plan": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ResearchAgent", "DraftAgent", "ReviewAgent", "DispatchAgent"]
+          },
+          "description": "Ordered list of registered agent names to engage"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Client identifier for tracking"
+        }
+      },
+      "required": ["brief", "routing_plan"]
+    }
+  },
+  {
+    "name": "send_to_ResearchAgent",
+    "description": "Route a research request to ResearchAgent when the client needs topic investigation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "The topic to research"
+        },
+        "depth": {
+          "type": "string",
+          "enum": ["quick", "deep"],
+          "description": "Research depth level"
+        },
+        "focus_areas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Subtopics to prioritize"
+        }
+      },
+      "required": ["topic"]
+    }
+  },
+  {
+    "name": "send_to_DraftAgent",
+    "description": "Route a drafting brief to DraftAgent when the client needs a written deliverable.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "brief": {
+          "type": "object",
+          "description": "The structured brief for drafting",
+          "properties": {
+            "topic": { "type": "string" },
+            "audience": { "type": "string" },
+            "tone": { "type": "string" },
+            "length": { "type": "string" },
+            "key_points": { "type": "array", "items": { "type": "string" } },
+            "format": { "type": "string" }
+          },
+          "required": ["topic"]
+        }
+      },
+      "required": ["brief"]
+    }
+  },
+  {
+    "name": "receive_from_DispatchAgent",
+    "description": "Receive client revision requests from DispatchAgent as new intake items to re-enter the pipeline.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "original_brief": {
+          "type": "object",
+          "description": "The original brief that was delivered"
+        },
+        "revision_feedback": {
+          "type": "string",
+          "description": "Client's feedback requesting changes"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Client identifier"
+        }
+      },
+      "required": ["original_brief", "revision_feedback", "client_id"]
+    }
+  }
+]

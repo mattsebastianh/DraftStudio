@@ -1,0 +1,223 @@
+[
+  {
+    "name": "check_requirements",
+    "description": "Verify the deliverable against every requirement in the original brief, producing pass/fail per requirement.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "type": "object",
+          "description": "The draft deliverable to check",
+          "properties": {
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "word_count": { "type": "integer" },
+            "unsupported": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["content"]
+        },
+        "brief": {
+          "type": "object",
+          "description": "The original brief with requirements",
+          "properties": {
+            "topic": { "type": "string" },
+            "audience": { "type": "string" },
+            "tone": { "type": "string" },
+            "length": { "type": "string" },
+            "key_points": { "type": "array", "items": { "type": "string" } },
+            "format": { "type": "string" }
+          },
+          "required": ["topic"]
+        }
+      },
+      "required": ["draft", "brief"]
+    }
+  },
+  {
+    "name": "assess_quality",
+    "description": "Score the deliverable on quality dimensions: clarity, accuracy, completeness, tone alignment. Returns a composite score 0-100.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "type": "object",
+          "description": "The draft deliverable to score",
+          "properties": {
+            "content": { "type": "string" },
+            "unsupported": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["content"]
+        },
+        "requirements_result": {
+          "type": "array",
+          "description": "Results from check_requirements",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement": { "type": "string" },
+              "passed": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "required": ["draft"]
+    }
+  },
+  {
+    "name": "flag_issues",
+    "description": "Identify and categorize specific problems with severity levels and suggested fixes.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "requirements_result": {
+          "type": "array",
+          "description": "Per-requirement pass/fail results from check_requirements",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement": { "type": "string" },
+              "passed": { "type": "boolean" },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "quality_score": {
+          "type": "integer",
+          "description": "Composite quality score from assess_quality"
+        },
+        "unsupported_claims": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of unsupported claims from the draft"
+        }
+      },
+      "required": ["requirements_result", "quality_score"]
+    }
+  },
+  {
+    "name": "send_to_DraftAgent",
+    "description": "Send a revision request back to DraftAgent with specific issues to address.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft_title": {
+          "type": "string",
+          "description": "Title of the draft being sent back"
+        },
+        "issues": {
+          "type": "array",
+          "description": "Issues to address in the revision",
+          "items": {
+            "type": "object",
+            "properties": {
+              "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+              "category": { "type": "string" },
+              "description": { "type": "string" },
+              "suggested_fix": { "type": "string" }
+            },
+            "required": ["severity", "description", "suggested_fix"]
+          }
+        },
+        "revision_round": {
+          "type": "integer",
+          "description": "Current revision cycle number"
+        }
+      },
+      "required": ["draft_title", "issues", "revision_round"]
+    }
+  },
+  {
+    "name": "send_to_DispatchAgent",
+    "description": "Send an approved deliverable to DispatchAgent for packaging and delivery.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "type": "object",
+          "description": "The approved draft deliverable",
+          "properties": {
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "format": { "type": "string" }
+          },
+          "required": ["title", "content"]
+        },
+        "review_summary": {
+          "type": "object",
+          "description": "Summary of the review result",
+          "properties": {
+            "score": { "type": "integer" },
+            "revision_rounds": { "type": "integer" }
+          }
+        }
+      },
+      "required": ["draft"]
+    }
+  },
+  {
+    "name": "send_to_ResearchAgent",
+    "description": "Request a targeted fact-check from ResearchAgent when factual accuracy cannot be verified.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "claims_to_verify": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific claims that need fact-checking"
+        },
+        "context": {
+          "type": "string",
+          "description": "Context about why these claims need verification"
+        },
+        "draft_title": {
+          "type": "string",
+          "description": "Title of the draft being fact-checked, for correlation"
+        },
+        "revision_round": {
+          "type": "integer",
+          "description": "Current revision cycle number, for correlation"
+        }
+      },
+      "required": ["claims_to_verify", "draft_title", "revision_round"]
+    }
+  },
+  {
+    "name": "receive_from_DraftAgent",
+    "description": "Receive a completed draft from DraftAgent for quality gate evaluation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "type": "object",
+          "description": "The completed draft deliverable",
+          "properties": {
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "format": { "type": "string" },
+            "unsupported": { "type": "array", "items": { "type": "string" } },
+            "word_count": { "type": "integer" }
+          },
+          "required": ["title", "content"]
+        },
+        "brief": {
+          "type": "object",
+          "description": "Original brief for requirement comparison",
+          "properties": {
+            "topic": { "type": "string" },
+            "audience": { "type": "string" },
+            "tone": { "type": "string" },
+            "length": { "type": "string" },
+            "key_points": { "type": "array", "items": { "type": "string" } },
+            "format": { "type": "string" }
+          },
+          "required": ["topic"]
+        },
+        "revision_round": {
+          "type": "integer",
+          "description": "Current revision cycle (0 = first submission)"
+        }
+      },
+      "required": ["draft", "brief", "revision_round"]
+    }
+  }
+]

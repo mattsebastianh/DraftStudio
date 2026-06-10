@@ -1,0 +1,77 @@
+wire:
+  id: DraftAgent_to_ReviewAgent
+  version: "1.0"
+  created: 2026-04-13
+
+sender:
+  agent: DraftAgent
+  trigger_condition: "Draft is complete and ready for quality review"
+  trigger_event: draft_complete
+
+receiver:
+  agent: ReviewAgent
+  entry_point: receive_from_DraftAgent
+
+message_schema:
+  type: object
+  required:
+    - draft
+    - brief
+    - revision_round
+  properties:
+    draft:
+      type: object
+      description: "The draft deliverable"
+      properties:
+        title:
+          type: string
+          example: "EU AI Act Compliance Guide"
+        content:
+          type: string
+          example: "# EU AI Act Compliance Guide..."
+        format:
+          type: string
+          example: "markdown"
+        unsupported:
+          type: array
+          items:
+            type: string
+        word_count:
+          type: integer
+          example: 1750
+    brief:
+      type: object
+      description: "The original brief for requirement comparison"
+      properties:
+        topic:
+          type: string
+        audience:
+          type: string
+        tone:
+          type: string
+        length:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+    revision_round:
+      type: integer
+      description: "Current revision cycle (0 = first review)"
+      example: 0
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire DraftAgent_to_ReviewAgent failed after 3 retries"
+
+metadata:
+  description: "Submits a completed draft from DraftAgent to ReviewAgent for quality gate evaluation"
+  data_sensitivity: internal

@@ -1,0 +1,77 @@
+# Agent Registry
+# Auto-updated by /new-agent and /agent-wire skills
+# Status values: draft | active | deprecated
+
+agents:
+  - name: ResearchAgent
+    role: Investigates topics and returns structured research dossiers with sourced findings
+    spec: specs/ResearchAgent_spec.md
+    system_prompt: agents/ResearchAgent/system_prompt.txt
+    tools: agents/ResearchAgent/tools.json
+    status: active
+    created: 2026-04-13
+    wires:
+      outgoing:
+        - wires/ResearchAgent_to_DraftAgent.yaml
+      incoming:
+        - wires/IntakeAgent_to_ResearchAgent.yaml
+        - wires/DraftAgent_to_ResearchAgent.yaml
+        - wires/ReviewAgent_to_ResearchAgent.yaml
+
+  - name: DraftAgent
+    role: Creates written deliverables from structured briefs and optional research inputs
+    spec: specs/DraftAgent_spec.md
+    system_prompt: agents/DraftAgent/system_prompt.txt
+    tools: agents/DraftAgent/tools.json
+    status: active
+    created: 2026-04-13
+    wires:
+      outgoing:
+        - wires/DraftAgent_to_ReviewAgent.yaml
+        - wires/DraftAgent_to_ResearchAgent.yaml
+      incoming:
+        - wires/ResearchAgent_to_DraftAgent.yaml
+        - wires/ReviewAgent_to_DraftAgent.yaml
+        - wires/IntakeAgent_to_DraftAgent.yaml
+
+  - name: ReviewAgent
+    role: Evaluates deliverables against brief requirements and quality standards before client delivery
+    spec: specs/ReviewAgent_spec.md
+    system_prompt: agents/ReviewAgent/system_prompt.txt
+    tools: agents/ReviewAgent/tools.json
+    status: active
+    created: 2026-04-13
+    wires:
+      outgoing:
+        - wires/ReviewAgent_to_DraftAgent.yaml
+        - wires/ReviewAgent_to_DispatchAgent.yaml
+        - wires/ReviewAgent_to_ResearchAgent.yaml
+      incoming:
+        - wires/DraftAgent_to_ReviewAgent.yaml
+
+  - name: IntakeAgent
+    role: Receives raw client requests, structures them into actionable briefs, classifies work type, and routes to the appropriate agent
+    spec: specs/IntakeAgent_spec.md
+    system_prompt: agents/IntakeAgent/system_prompt.txt
+    tools: agents/IntakeAgent/tools.json
+    status: active
+    created: 2026-04-13
+    wires:
+      outgoing:
+        - wires/IntakeAgent_to_ResearchAgent.yaml
+        - wires/IntakeAgent_to_DraftAgent.yaml
+      incoming:
+        - wires/DispatchAgent_to_IntakeAgent.yaml
+
+  - name: DispatchAgent
+    role: Packages approved deliverables for client delivery, attaches context, and confirms successful handoff
+    spec: specs/DispatchAgent_spec.md
+    system_prompt: agents/DispatchAgent/system_prompt.txt
+    tools: agents/DispatchAgent/tools.json
+    status: active
+    created: 2026-04-13
+    wires:
+      outgoing:
+        - wires/DispatchAgent_to_IntakeAgent.yaml
+      incoming:
+        - wires/ReviewAgent_to_DispatchAgent.yaml

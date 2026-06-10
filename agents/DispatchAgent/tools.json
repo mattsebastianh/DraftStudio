@@ -1,0 +1,175 @@
+[
+  {
+    "name": "package_deliverable",
+    "description": "Format the deliverable per client preferences and apply final formatting. Only call with review_status = approved.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "type": "object",
+          "description": "The approved draft deliverable",
+          "properties": {
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "format": { "type": "string" }
+          },
+          "required": ["title", "content"]
+        },
+        "review_status": {
+          "type": "string",
+          "enum": ["approved"],
+          "description": "Must be 'approved' — deliverables without approved status must not be packaged"
+        },
+        "client_preferences": {
+          "type": "object",
+          "description": "Client formatting and delivery preferences",
+          "properties": {
+            "format": { "type": "string" },
+            "include_sources": { "type": "boolean" },
+            "include_revision_history": { "type": "boolean" }
+          }
+        }
+      },
+      "required": ["draft", "review_status"]
+    }
+  },
+  {
+    "name": "attach_context",
+    "description": "Append research sources consulted, revision history, and agency metadata to the deliverable package.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "package": {
+          "type": "object",
+          "description": "The packaged deliverable from package_deliverable",
+          "properties": {
+            "content": { "type": "string" },
+            "format": { "type": "string" }
+          },
+          "required": ["content"]
+        },
+        "sources": {
+          "type": "array",
+          "description": "Research sources consulted",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        },
+        "revision_history": {
+          "type": "array",
+          "description": "Revision notes from review cycles",
+          "items": {
+            "type": "object",
+            "properties": {
+              "round": { "type": "integer" },
+              "issues_addressed": { "type": "integer" },
+              "changes": { "type": "string" }
+            }
+          }
+        },
+        "review_summary": {
+          "type": "object",
+          "description": "Review result summary",
+          "properties": {
+            "score": { "type": "integer" },
+            "revision_rounds": { "type": "integer" }
+          }
+        }
+      },
+      "required": ["package"]
+    }
+  },
+  {
+    "name": "confirm_delivery",
+    "description": "Record the delivery event, track client confirmation or feedback, and close the work item.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "package": {
+          "type": "object",
+          "description": "The complete packaged deliverable with context",
+          "properties": {
+            "content": { "type": "string" },
+            "format": { "type": "string" },
+            "sources": { "type": "array" },
+            "revision_history": { "type": "array" },
+            "metadata": { "type": "object" }
+          },
+          "required": ["content"]
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Client identifier for tracking"
+        }
+      },
+      "required": ["package"]
+    }
+  },
+  {
+    "name": "send_to_IntakeAgent",
+    "description": "Route a client revision request to IntakeAgent as a new intake item to re-enter the full pipeline.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "original_brief": {
+          "type": "object",
+          "description": "The original brief that was delivered"
+        },
+        "revision_feedback": {
+          "type": "string",
+          "description": "Client's feedback requesting changes"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Client identifier"
+        }
+      },
+      "required": ["original_brief", "revision_feedback", "client_id"]
+    }
+  },
+  {
+    "name": "receive_from_ReviewAgent",
+    "description": "Receive an approved deliverable from ReviewAgent for packaging and delivery.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "type": "object",
+          "description": "The approved draft deliverable",
+          "properties": {
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "format": { "type": "string" }
+          },
+          "required": ["title", "content"]
+        },
+        "review_summary": {
+          "type": "object",
+          "description": "Summary of the review result",
+          "properties": {
+            "score": { "type": "integer" },
+            "revision_rounds": { "type": "integer" }
+          }
+        },
+        "client_preferences": {
+          "type": "object",
+          "description": "Client formatting and delivery preferences passed through from IntakeAgent context",
+          "properties": {
+            "format": { "type": "string" },
+            "include_sources": { "type": "boolean" },
+            "include_revision_history": { "type": "boolean" }
+          }
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Client identifier for tracking and delivery"
+        }
+      },
+      "required": ["draft"]
+    }
+  }
+]
