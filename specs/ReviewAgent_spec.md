@@ -29,6 +29,7 @@ Every deliverable the agency produces must pass a quality gate before reaching t
 | review             | object | DraftAgent / DispatchAgent / User | Review result object              |
 | review.status      | string | DraftAgent / DispatchAgent | "approved" or "revision_required"       |
 | review.score       | number | DraftAgent / DispatchAgent | Composite quality score 0-100        |
+| review.dimension_scores | object | DraftAgent / DispatchAgent | Per-dimension scores 0-100: clarity, accuracy, completeness, tone_alignment |
 | review.requirements_check | array | DraftAgent | Per-requirement pass/fail results        |
 | review.issues      | array  | DraftAgent           | Categorized issues with severity and fix suggestions |
 | review.approved    | boolean | DispatchAgent       | Whether the deliverable passes the quality gate   |
@@ -37,7 +38,7 @@ Every deliverable the agency produces must pass a quality gate before reaching t
 | Tool Name          | Purpose                                      | External Service |
 |--------------------|----------------------------------------------|------------------|
 | check_requirements | Verify deliverable against every brief requirement | Internal   |
-| assess_quality     | Score deliverable on clarity, accuracy, completeness, tone | Internal |
+| assess_quality     | Score deliverable per-dimension (clarity, accuracy, completeness, tone) plus composite | Internal |
 | flag_issues        | Identify and categorize problems with severity and suggested fixes | Internal |
 
 ## Constraints (Hard Rules)
@@ -91,6 +92,7 @@ Every deliverable the agency produces must pass a quality gate before reaching t
   "review": {
     "status": "revision_required",
     "score": 72,
+    "dimension_scores": { "clarity": 84, "accuracy": 68, "completeness": 60, "tone_alignment": 82 },
     "requirements_check": [
       { "requirement": "risk tiers", "passed": true },
       { "requirement": "SMB exemptions", "passed": true },
