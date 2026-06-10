@@ -17,7 +17,7 @@ This test verified the complete end-to-end workflow by:
 4. Checking that tool parameter schemas are consistent across wire boundaries
 5. Verifying all escalation and revision paths are reachable
 
-**Test type note:** This is a static/structural verification, not a live execution test. It confirms the wiring is consistent and all contracts are defined. Live execution testing requires a running ollama cloud runtime with model inference.
+**Test type note:** This is a static/structural verification, not a live execution test. It confirms the wiring is consistent and all contracts are defined. Live execution testing requires model inference via the Groq API (models configured in `.env`).
 
 ---
 
@@ -236,4 +236,4 @@ The following issues were discovered during wire integrity verification and fixe
 
 **PASS** — all 9 wires verified, all entry_points match receiver tools, all escalation paths reachable, all approval gates enforced at schema level.
 
-**Next step for live testing:** Deploy agents with glm-5.1:cloud model via ollama cloud, submit a real client request through IntakeAgent, and verify actual model outputs flow correctly through the pipeline.
+**Next step for live testing:** Deploy agents with the primary model (`GROQ_PRIMARY_MODEL` from `.env`) via the Groq API, submit a real client request through IntakeAgent, and verify actual model outputs flow correctly through the pipeline.
