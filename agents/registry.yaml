@@ -2,6 +2,13 @@
 # Auto-updated by /new-agent and /agent-wire skills
 # Status values: draft | active | deprecated
 
+runtime:
+  provider: groq
+  base_url_env: GROQ_BASE_URL       # resolved from .env, never hardcoded
+  api_key_env: GROQ_API_KEY         # resolved from .env, never hardcoded
+  primary_model_env: GROQ_PRIMARY_MODEL
+  fallback_model_env: GROQ_FALLBACK_MODEL
+
 agents:
   - name: ResearchAgent
     role: Investigates topics and returns structured research dossiers with sourced findings

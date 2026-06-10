@@ -3,14 +3,16 @@
 ## Project Goal
 Build a holistic ecosystem of AI Agents that act as skilled digital workers.
 Each agent holds a specific, non-overlapping role within the agency.
-All agents are built with claude-code, powered by ollama cloud-executed open-weight models.
+All agents are built with claude-code, powered by open-weight models served on Groq's fast inference platform.
 
 ## Primary Model
-- **GLM-5.1** (ollama cloud) — flagship agentic engineering model, SWE-Bench Pro SOTA
-- Fallback: minimax-m2.7 (1M context, orchestration tasks)
+- **GPT-OSS 120B** (`openai/gpt-oss-120b`, Groq API) — flagship agentic open-weight reasoning model
+- Fallback: `llama-3.3-70b-versatile` (cheap orchestration tasks)
+- Model IDs are set in `.env` (`GROQ_PRIMARY_MODEL`, `GROQ_FALLBACK_MODEL`) — change them there, not in configs
 
 ## Project Stack
-- Runtime: claude-code + ollama cloud models
+- Runtime: claude-code + Groq-served models (OpenAI-compatible endpoint at `GROQ_BASE_URL`)
+- Secrets: `.env` file (gitignored) — see `.env.example` for the template
 - Agent format: Markdown spec + JSON tool definitions + plain-text system prompt
 - Orchestration: Agent registry in `agents/registry.yaml`
 - Inter-agent contracts: `wires/` directory
@@ -44,6 +46,8 @@ handoffs/        ← Session export dumps from /context-dump
 | `/context-dump`  | Export session as a structured handoff doc     |
 
 ## Key Rules for Claude
+- Never hardcode API keys, tokens, or secrets in any file — always reference environment variables loaded from `.env`
+- Never commit `.env`; keep `.env.example` updated whenever a new variable is added
 - Never scaffold an agent without a spec in `specs/`
 - Never skip the escalation/fallback path in any agent
 - When modifying a wire, update BOTH agent's tool definitions
