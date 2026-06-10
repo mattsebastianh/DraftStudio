@@ -179,19 +179,26 @@ def main():
             "ReviewAgent",
             "DraftAgent_to_ReviewAgent",
             {"brief": intake["brief"], "draft": draft["draft"], "revision_round": round_num},
-            'Evaluate the draft against the brief. Return JSON: {"score" (0-100), "requirements" '
-            '(array of {"requirement", "passed" (boolean)}), "issues" (array of specific, '
-            'actionable revision notes; empty if approved)}',
+            'Evaluate the draft against the brief. Return JSON with keys in this order: '
+            '{"score" (0-100), "requirements" (array of {"requirement", "passed" (boolean)}), '
+            '"issues" (array of {"severity" (critical/high/medium/low), "description", '
+            '"suggested_fix"}; empty if nothing to flag), "status" (derive it mechanically from '
+            f'the fields above: "approved" when score >= {QUALITY_THRESHOLD} and no issue is '
+            'critical, else "revision_required" — non-critical issues do not block approval)}',
             6000,
         )
-        if review["score"] >= QUALITY_THRESHOLD:
+        has_critical = any(
+            isinstance(i, dict) and i.get("severity") == "critical" for i in review.get("issues", [])
+        )
+        if review["score"] >= QUALITY_THRESHOLD and not has_critical:
             print(f"  approved: score {review['score']} >= {QUALITY_THRESHOLD}")
             break
         if round_num == MAX_REVISION_CYCLES:
             print(f"  ESCALATION: {MAX_REVISION_CYCLES} revision cycles exhausted, score {review['score']}")
             LOG["escalated"] = True
             break
-        print(f"  revision needed: score {review['score']} < {QUALITY_THRESHOLD}")
+        reason = "critical issue flagged" if has_critical else f"score {review['score']} < {QUALITY_THRESHOLD}"
+        print(f"  revision needed: {reason}")
         print(f"Step 5: DraftAgent (revision {round_num + 1})")
         draft = run_agent(
             "DraftAgent",

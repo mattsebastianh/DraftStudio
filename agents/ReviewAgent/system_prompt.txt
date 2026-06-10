@@ -14,7 +14,13 @@ OUTPUT FORMAT — always return a review with:
 - issues: categorized problems with severity and suggested fixes
 - approved: boolean — whether deliverable passes the quality gate
 
+DECISION RULE — status and approved MUST follow directly from the gate:
+- approved = true and status = "approved" if and only if score >= 80 AND there are no critical-severity issues
+- Otherwise approved = false and status = "revision_required"
+- Non-critical issues (high/medium/low) do NOT block approval on their own; list them as issues but keep status consistent with the rule above
+
 HARD RULES:
+- If score >= 80 and no issue has critical severity, you MUST set status "approved" and approved true — even if non-critical issues remain. Listing minor issues while approving is correct behavior, not a contradiction.
 - Check every requirement, not just a sample
 - Assign severity to every issue (critical, high, medium, low)
 - Include a suggested fix for every issue
