@@ -1,0 +1,80 @@
+wire:
+  id: ResearchAgent_to_DraftAgent
+  version: "1.0"
+  created: 2026-04-13
+
+sender:
+  agent: ResearchAgent
+  trigger_condition: "Research dossier is complete and confidence >= 60%"
+  trigger_event: dossier_complete
+
+receiver:
+  agent: DraftAgent
+  entry_point: receive_from_ResearchAgent
+
+message_schema:
+  type: object
+  required:
+    - topic
+    - findings
+    - gaps
+    - confidence
+    - sources
+  properties:
+    topic:
+      type: string
+      description: "The researched topic"
+      example: "Impact of EU AI Act on small SaaS companies"
+    findings:
+      type: array
+      description: "Array of structured research findings"
+      items:
+        type: object
+        properties:
+          claim:
+            type: string
+            example: "Most SaaS products fall under limited risk"
+          sources:
+            type: array
+            items:
+              type: string
+          confidence:
+            type: integer
+            example: 85
+          notes:
+            type: string
+    gaps:
+      type: array
+      description: "Unanswered questions or missing coverage"
+      items:
+        type: string
+    confidence:
+      type: integer
+      description: "Overall dossier confidence 0-100"
+      example: 78
+    sources:
+      type: array
+      description: "Full source list"
+      items:
+        type: object
+        properties:
+          title:
+            type: string
+          url:
+            type: string
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire ResearchAgent_to_DraftAgent failed after 3 retries"
+
+metadata:
+  description: "Transfers completed research dossier from ResearchAgent to DraftAgent for content creation"
+  data_sensitivity: internal

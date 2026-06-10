@@ -1,0 +1,178 @@
+[
+  {
+    "name": "web_search",
+    "description": "Search the web for information on a topic. Returns ranked source URLs and snippets.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "The search query string"
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum number of results to return (default: 10)",
+          "default": 10
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "extract_facts",
+    "description": "Extract and structure key facts, claims, and data points from source material. Returns an array of structured findings.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "source_content": {
+          "type": "string",
+          "description": "The raw text content from a source to extract facts from"
+        },
+        "source_url": {
+          "type": "string",
+          "description": "URL of the source being analyzed"
+        },
+        "focus_areas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional subtopics to prioritize during extraction"
+        }
+      },
+      "required": ["source_content", "source_url"]
+    }
+  },
+  {
+    "name": "compile_dossier",
+    "description": "Assemble extracted findings into a structured research dossier with source citations, confidence levels, and identified gaps.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "The researched topic"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "claim": { "type": "string" },
+              "sources": { "type": "array", "items": { "type": "string" } },
+              "confidence": { "type": "integer" },
+              "notes": { "type": "string" }
+            },
+            "required": ["claim", "sources", "confidence"]
+          },
+          "description": "Array of structured findings"
+        },
+        "gaps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Unanswered questions or missing coverage areas"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "url": { "type": "string" }
+            },
+            "required": ["title", "url"]
+          },
+          "description": "Full list of sources with titles and URLs"
+        }
+      },
+      "required": ["topic", "findings", "gaps", "sources"]
+    }
+  },
+  {
+    "name": "send_to_DraftAgent",
+    "description": "Send a completed research dossier to DraftAgent for content creation. Only send when dossier confidence >= 60%.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "dossier": {
+          "type": "object",
+          "description": "The completed research dossier to transfer",
+          "properties": {
+            "topic": { "type": "string" },
+            "findings": { "type": "array" },
+            "gaps": { "type": "array" },
+            "confidence": { "type": "integer" },
+            "sources": { "type": "array" }
+          },
+          "required": ["topic", "findings", "gaps", "confidence", "sources"]
+        }
+      },
+      "required": ["dossier"]
+    }
+  },
+  {
+    "name": "receive_from_IntakeAgent",
+    "description": "Receive a research request routed from IntakeAgent after client request parsing and classification.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "The topic to research"
+        },
+        "depth": {
+          "type": "string",
+          "enum": ["quick", "deep"],
+          "description": "Research depth level"
+        },
+        "focus_areas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Subtopics to prioritize"
+        }
+      },
+      "required": ["topic"]
+    }
+  },
+  {
+    "name": "receive_from_DraftAgent",
+    "description": "Receive a research request from DraftAgent when the draft topic requires sourced grounding not present in the original brief.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "The topic requiring investigation"
+        },
+        "depth": {
+          "type": "string",
+          "enum": ["quick", "deep"],
+          "description": "Research depth level"
+        },
+        "focus_areas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific areas needing research grounding"
+        }
+      },
+      "required": ["topic"]
+    }
+  },
+  {
+    "name": "receive_from_ReviewAgent",
+    "description": "Receive a targeted fact-check request from ReviewAgent when factual accuracy cannot be verified.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "claims_to_verify": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific claims that need fact-checking"
+        },
+        "context": {
+          "type": "string",
+          "description": "Why these claims need verification"
+        }
+      },
+      "required": ["claims_to_verify"]
+    }
+  }
+]

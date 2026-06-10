@@ -1,0 +1,50 @@
+wire:
+  id: DraftAgent_to_ResearchAgent
+  version: "1.0"
+  created: 2026-04-14
+
+sender:
+  agent: DraftAgent
+  trigger_condition: "Brief requires sourced facts for a fact-heavy topic and no research dossier was provided"
+  trigger_event: research_requested
+
+receiver:
+  agent: ResearchAgent
+  entry_point: receive_from_DraftAgent
+
+message_schema:
+  type: object
+  required:
+    - topic
+  properties:
+    topic:
+      type: string
+      description: "The topic requiring investigation"
+      example: "EU AI Act penalties for non-compliance"
+    depth:
+      type: string
+      enum: ["quick", "deep"]
+      description: "Research depth level"
+      example: "deep"
+    focus_areas:
+      type: array
+      items:
+        type: string
+      description: "Specific areas that need research grounding"
+      example: ["fines", "enforcement timelines"]
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire DraftAgent_to_ResearchAgent failed after 3 retries"
+
+metadata:
+  description: "Routes fact-check research requests from DraftAgent to ResearchAgent when a topic requires sourced grounding"
+  data_sensitivity: internal

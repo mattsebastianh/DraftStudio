@@ -1,0 +1,58 @@
+wire:
+  id: ReviewAgent_to_DispatchAgent
+  version: "1.0"
+  created: 2026-04-13
+
+sender:
+  agent: ReviewAgent
+  trigger_condition: "Deliverable passes quality review (status = approved, no critical/high issues)"
+  trigger_event: deliverable_approved
+
+receiver:
+  agent: DispatchAgent
+  entry_point: receive_from_ReviewAgent
+
+message_schema:
+  type: object
+  required:
+    - draft
+  properties:
+    draft:
+      type: object
+      description: "The approved draft deliverable"
+      properties:
+        title:
+          type: string
+          example: "EU AI Act Compliance Guide"
+        content:
+          type: string
+          example: "# EU AI Act Compliance Guide..."
+        format:
+          type: string
+          example: "markdown"
+    review_summary:
+      type: object
+      description: "Summary of the review result"
+      properties:
+        score:
+          type: integer
+          example: 87
+        revision_rounds:
+          type: integer
+          example: 1
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire ReviewAgent_to_DispatchAgent failed after 3 retries"
+
+metadata:
+  description: "Transfers approved deliverables from ReviewAgent to DispatchAgent for packaging and client delivery"
+  data_sensitivity: internal

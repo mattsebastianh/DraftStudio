@@ -1,0 +1,59 @@
+wire:
+  id: IntakeAgent_to_DraftAgent
+  version: "1.0"
+  created: 2026-04-13
+
+sender:
+  agent: IntakeAgent
+  trigger_condition: "Request classified as draft-ready (draft_from_scratch, or draft-only with no research needed)"
+  trigger_event: draft_routed
+
+receiver:
+  agent: DraftAgent
+  entry_point: receive_from_IntakeAgent
+
+message_schema:
+  type: object
+  required:
+    - brief
+  properties:
+    brief:
+      type: object
+      description: "Structured brief for drafting"
+      properties:
+        topic:
+          type: string
+          example: "AI regulation compliance for small SaaS companies"
+        audience:
+          type: string
+          example: "Founders of small SaaS companies"
+        tone:
+          type: string
+          example: "professional but approachable"
+        length:
+          type: string
+          example: "1500-2500 words"
+        key_points:
+          type: array
+          items:
+            type: string
+          example: ["current AI regulations", "compliance steps"]
+        format:
+          type: string
+          example: "markdown"
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire IntakeAgent_to_DraftAgent failed after 3 retries"
+
+metadata:
+  description: "Routes drafting briefs from IntakeAgent to DraftAgent for content creation"
+  data_sensitivity: internal

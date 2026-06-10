@@ -1,0 +1,50 @@
+wire:
+  id: IntakeAgent_to_ResearchAgent
+  version: "1.0"
+  created: 2026-04-13
+
+sender:
+  agent: IntakeAgent
+  trigger_condition: "Request classified as needing research (research_only, draft_from_research, or full_service)"
+  trigger_event: research_routed
+
+receiver:
+  agent: ResearchAgent
+  entry_point: receive_from_IntakeAgent
+
+message_schema:
+  type: object
+  required:
+    - topic
+  properties:
+    topic:
+      type: string
+      description: "The topic to research"
+      example: "AI regulation compliance for small SaaS companies"
+    depth:
+      type: string
+      enum: ["quick", "deep"]
+      description: "Research depth level"
+      example: "deep"
+    focus_areas:
+      type: array
+      items:
+        type: string
+      description: "Subtopics to prioritize"
+      example: ["compliance deadlines", "SMB exemptions"]
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire IntakeAgent_to_ResearchAgent failed after 3 retries"
+
+metadata:
+  description: "Routes research requests from IntakeAgent to ResearchAgent for topic investigation"
+  data_sensitivity: internal

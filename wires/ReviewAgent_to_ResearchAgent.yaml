@@ -1,0 +1,55 @@
+wire:
+  id: ReviewAgent_to_ResearchAgent
+  version: "1.0"
+  created: 2026-04-14
+
+sender:
+  agent: ReviewAgent
+  trigger_condition: "Factual accuracy of a claim cannot be verified from available information"
+  trigger_event: fact_check_requested
+
+receiver:
+  agent: ResearchAgent
+  entry_point: receive_from_ReviewAgent
+
+message_schema:
+  type: object
+  required:
+    - claims_to_verify
+    - draft_title
+    - revision_round
+  properties:
+    claims_to_verify:
+      type: array
+      items:
+        type: string
+      description: "Specific claims that need fact-checking"
+      example: ["EU AI Act fines up to €35M apply to all SaaS companies"]
+    context:
+      type: string
+      description: "Why these claims need verification"
+      example: "Claim appears in draft but no source was cited"
+    draft_title:
+      type: string
+      description: "Title of the draft being fact-checked, for correlation"
+      example: "EU AI Act Compliance Guide"
+    revision_round:
+      type: integer
+      description: "Current revision cycle number, for correlation"
+      example: 1
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire ReviewAgent_to_ResearchAgent failed after 3 retries"
+
+metadata:
+  description: "Routes fact-check requests from ReviewAgent to ResearchAgent when a draft claim cannot be verified"
+  data_sensitivity: internal

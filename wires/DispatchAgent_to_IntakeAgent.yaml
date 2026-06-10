@@ -1,0 +1,60 @@
+wire:
+  id: DispatchAgent_to_IntakeAgent
+  version: "1.0"
+  created: 2026-04-13
+
+sender:
+  agent: DispatchAgent
+  trigger_condition: "Client requests revision after delivery (delivery_status = revision_requested)"
+  trigger_event: revision_requested
+
+receiver:
+  agent: IntakeAgent
+  entry_point: receive_from_DispatchAgent
+
+message_schema:
+  type: object
+  required:
+    - original_brief
+    - revision_feedback
+    - client_id
+  properties:
+    original_brief:
+      type: object
+      description: "The original brief that was delivered"
+      properties:
+        topic:
+          type: string
+          example: "AI regulation compliance for small SaaS companies"
+        audience:
+          type: string
+        tone:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+    revision_feedback:
+      type: string
+      description: "Client's feedback requesting changes"
+      example: "Please add a section about penalties for non-compliance"
+    client_id:
+      type: string
+      description: "Client identifier"
+      example: "client_acme_001"
+
+failure_handling:
+  on_timeout:
+    action: retry
+    max_retries: 3
+    backoff_seconds: 5
+  on_error:
+    action: escalate
+    escalate_to: "human"
+  on_max_retries_exceeded:
+    action: alert_human
+    message: "Wire DispatchAgent_to_IntakeAgent failed after 3 retries"
+
+metadata:
+  description: "Routes client revision requests from DispatchAgent back to IntakeAgent as new intake items to re-enter the full pipeline"
+  data_sensitivity: internal
