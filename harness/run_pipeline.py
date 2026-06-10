@@ -67,7 +67,10 @@ def chat(system_prompt, user_message, max_tokens, model=None):
             break
         except urllib.error.HTTPError as err:
             detail = err.read().decode(errors="replace")[:300]
-            if err.code not in (429, 500, 502, 503) or attempt == 4:
+            retryable = err.code in (429, 500, 502, 503) or (
+                err.code == 400 and "tool_use_failed" in detail
+            )
+            if not retryable or attempt == 4:
                 print(f"    HTTP {err.code}: {detail}")
                 raise
             wait = float(err.headers.get("Retry-After") or 2 ** (attempt + 1))
@@ -113,8 +116,19 @@ def run_agent(agent, wire, message, format_instructions, max_tokens):
         + format_instructions
         + "\nRespond with ONLY a valid JSON object, no other text."
     )
-    result = chat(system_prompt(agent), user_message, max_tokens)
-    parsed = extract_json(result["content"])
+    for attempt in range(3):
+        result = chat(system_prompt(agent), user_message, max_tokens)
+        try:
+            parsed = extract_json(result["content"])
+            break
+        except (ValueError, json.JSONDecodeError) as err:
+            print(f"    bad JSON from {agent} (attempt {attempt + 1}/3): {err}")
+            if attempt == 2:
+                (REPO / "tests" / "live_runs").mkdir(exist_ok=True)
+                bad = REPO / "tests" / "live_runs" / f"bad_reply_{agent}_{int(time.time())}.txt"
+                bad.write_text(result["content"])
+                print(f"    raw reply saved to {bad.relative_to(REPO)}")
+                raise
     LOG["steps"].append(
         {
             "agent": agent,
