@@ -1,5 +1,5 @@
 ---
-description: Scaffold a complete AI agent from an existing spec. Creates all required files for a new agent role in the JournilabAgents ecosystem.
+description: Scaffold a complete AI agent from an existing spec. Creates all required files for a new agent role in the DraftStudio ecosystem.
 user-invocable: true
 ---
 

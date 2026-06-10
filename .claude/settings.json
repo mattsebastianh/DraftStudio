@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Task complete — ready for next instruction.\" with title \"JournilabAgents\" subtitle \"claude-code\" sound name \"Glass\"'"
+            "command": "osascript -e 'display notification \"Task complete — ready for next instruction.\" with title \"DraftStudio\" subtitle \"claude-code\" sound name \"Glass\"'"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Claude-code needs your input.\" with title \"JournilabAgents\" sound name \"Ping\"'"
+            "command": "osascript -e 'display notification \"Claude-code needs your input.\" with title \"DraftStudio\" sound name \"Ping\"'"
           }
         ]
       }

@@ -98,7 +98,7 @@ After a deliverable passes the quality gate, it needs to be packaged, formatted 
       { "round": 1, "issues_addressed": 2, "changes": "Added documentation section and compliance deadlines" }
     ],
     "metadata": {
-      "agency": "JournilabAgents",
+      "agency": "DraftStudio",
       "pipeline": ["IntakeAgent", "ResearchAgent", "DraftAgent", "ReviewAgent", "DispatchAgent"],
       "delivered": "2026-04-13T15:30:00Z"
     }

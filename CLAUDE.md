@@ -1,4 +1,4 @@
-# JournilabAgents — Agentic AI Agency
+# DraftStudio — Agentic AI Agency
 
 ## Project Goal
 Build a holistic ecosystem of AI Agents that act as skilled digital workers.

@@ -1,7 +1,7 @@
-# Plan: Build JournilabAgents Digital Worker Agency
+# Plan: Build DraftStudio Digital Worker Agency
 
 ## Context
-JournilabAgents is an agentic AI agency building a 5-agent digital worker ecosystem. All 5 agents are fully built, reviewed, pipeline-tested, and active as of 2026-04-14. Remaining work is v2 enhancements (see Next Steps).
+DraftStudio is an agentic AI agency building a 5-agent digital worker ecosystem. All 5 agents are fully built, reviewed, pipeline-tested, and active as of 2026-04-14. Remaining work is v2 enhancements (see Next Steps).
 
 ## Agent Lineup
 

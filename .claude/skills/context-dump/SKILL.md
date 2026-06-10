@@ -45,7 +45,7 @@ Use this to:
    ```markdown
    # Session Handoff
    **Date:** <YYYY-MM-DD HH:MM:SS>
-   **Project:** JournilabAgents
+   **Project:** DraftStudio
    **Model Used:** <model name>
    **Session Duration:** <estimated>
 
@@ -76,7 +76,7 @@ Use this to:
    ## Re-Hydration Prompt
    > Paste this into a new claude-code session to resume:
    >
-   > "I'm continuing work on JournilabAgents. Please read CLAUDE.md and the
+   > "I'm continuing work on DraftStudio. Please read CLAUDE.md and the
    > handoff document at handoffs/<filename>. Then proceed with: [NEXT ACTION 1]"
    ```
 
