@@ -35,7 +35,7 @@
   },
   {
     "name": "assess_quality",
-    "description": "Score the deliverable on quality dimensions: clarity, accuracy, completeness, tone alignment. Returns a composite score 0-100.",
+    "description": "Score the deliverable on quality dimensions: clarity, accuracy, completeness, tone alignment. Returns a per-dimension score 0-100 for each dimension plus a composite score 0-100 consistent with them.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -147,6 +147,16 @@
           "description": "Summary of the review result",
           "properties": {
             "score": { "type": "integer" },
+            "dimension_scores": {
+              "type": "object",
+              "description": "Per-dimension quality scores (0-100)",
+              "properties": {
+                "clarity": { "type": "integer" },
+                "accuracy": { "type": "integer" },
+                "completeness": { "type": "integer" },
+                "tone_alignment": { "type": "integer" }
+              }
+            },
             "revision_rounds": { "type": "integer" }
           }
         }

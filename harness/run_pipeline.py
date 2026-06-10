@@ -180,16 +180,21 @@ def main():
             "DraftAgent_to_ReviewAgent",
             {"brief": intake["brief"], "draft": draft["draft"], "revision_round": round_num},
             'Evaluate the draft against the brief. Return JSON with keys in this order: '
-            '{"score" (0-100), "requirements" (array of {"requirement", "passed" (boolean)}), '
+            '{"dimension_scores" ({"clarity", "accuracy", "completeness", "tone_alignment"}, '
+            'each 0-100), "score" (composite 0-100, consistent with the dimensions), '
+            '"requirements" (array of {"requirement", "passed" (boolean)}), '
             '"issues" (array of {"severity" (critical/high/medium/low), "description", '
             '"suggested_fix"}; empty if nothing to flag), "status" (derive it mechanically from '
             f'the fields above: "approved" when score >= {QUALITY_THRESHOLD} and no issue is '
             'critical, else "revision_required" — non-critical issues do not block approval)}',
-            6000,
+            4500,
         )
         has_critical = any(
             isinstance(i, dict) and i.get("severity") == "critical" for i in review.get("issues", [])
         )
+        dims = review.get("dimension_scores")
+        if dims:
+            print("  dimensions: " + ", ".join(f"{k} {v}" for k, v in dims.items()))
         if review["score"] >= QUALITY_THRESHOLD and not has_critical:
             print(f"  approved: score {review['score']} >= {QUALITY_THRESHOLD}")
             break

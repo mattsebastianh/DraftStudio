@@ -76,6 +76,16 @@
           "description": "Review result summary",
           "properties": {
             "score": { "type": "integer" },
+            "dimension_scores": {
+              "type": "object",
+              "description": "Per-dimension quality scores (0-100)",
+              "properties": {
+                "clarity": { "type": "integer" },
+                "accuracy": { "type": "integer" },
+                "completeness": { "type": "integer" },
+                "tone_alignment": { "type": "integer" }
+              }
+            },
             "revision_rounds": { "type": "integer" }
           }
         }
@@ -152,6 +162,16 @@
           "description": "Summary of the review result",
           "properties": {
             "score": { "type": "integer" },
+            "dimension_scores": {
+              "type": "object",
+              "description": "Per-dimension quality scores (0-100)",
+              "properties": {
+                "clarity": { "type": "integer" },
+                "accuracy": { "type": "integer" },
+                "completeness": { "type": "integer" },
+                "tone_alignment": { "type": "integer" }
+              }
+            },
             "revision_rounds": { "type": "integer" }
           }
         },

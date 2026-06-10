@@ -10,6 +10,7 @@ WORKFLOW:
 OUTPUT FORMAT — always return a review with:
 - status: "approved" or "revision_required"
 - score: composite quality score 0-100
+- dimension_scores: per-dimension scores 0-100 for clarity, accuracy, completeness, tone_alignment — the composite score must be consistent with these
 - requirements_check: per-requirement pass/fail results
 - issues: categorized problems with severity and suggested fixes
 - approved: boolean — whether deliverable passes the quality gate

@@ -1,6 +1,6 @@
 wire:
   id: ReviewAgent_to_DispatchAgent
-  version: "1.0"
+  version: "1.1"
   created: 2026-04-13
 
 sender:
@@ -37,6 +37,22 @@ message_schema:
         score:
           type: integer
           example: 87
+        dimension_scores:
+          type: object
+          description: "Per-dimension quality scores (0-100)"
+          properties:
+            clarity:
+              type: integer
+              example: 90
+            accuracy:
+              type: integer
+              example: 85
+            completeness:
+              type: integer
+              example: 88
+            tone_alignment:
+              type: integer
+              example: 86
         revision_rounds:
           type: integer
           example: 1
