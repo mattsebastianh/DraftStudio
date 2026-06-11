@@ -67,6 +67,8 @@ You should get a JSON list of available models.
 
 ## Using the Studio
 
+> **Hands-on guide:** see the [DraftStudio Handbook](docs/draftstudio_handbook.md) for a practical walkthrough of running the pipeline, with a real worked example and troubleshooting.
+
 Open claude-code in the repo root. The studio is operated through five slash commands (project skills in `.claude/skills/`):
 
 | Command | What it does |
