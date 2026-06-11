@@ -36,6 +36,28 @@ handoffs/        ← Session export dumps from /context-dump
 - Every agent must define: Role, Goal, Backstory, Tools, Constraints, Escalation rules
 - Every wire must define: trigger event, message schema, failure handling
 
+## Live Pipeline Harness — When to Run It Automatically
+Run `harness/run_pipeline.py` (no need to ask first) whenever a user asks something like:
+- "run/test the pipeline", "live-test this request", "try this through the agents"
+- "re-run the [cap-vs-structure / revision-loop / etc.] trap"
+- to verify a change to an agent, wire, or the harness itself with real model output
+
+### How to invoke
+Always redirect to a file outside the session tmp dir and run in the background — direct output capture has been unreliable for long runs:
+```
+python3 harness/run_pipeline.py "<client request text>" > /tmp/pipeline_run.log 2>&1
+```
+Then use Monitor (or tail) on `/tmp/pipeline_run.log`, watching for `Step`, `done`, `approved`, `ESCALATION`, `HTTP`, `Run log`. TPM `HTTP 429` lines with an automatic retry are normal, not failures.
+
+### After a run completes
+- Run log: `tests/live_runs/run_<id>.json` — check each step's `model` (did fallback trigger?), the final `review.score`, and `escalated`/`round_num` for revision-loop activity
+- Deliverable: `deliverables/<slug>.md`
+- Bad JSON replies are saved to `tests/live_runs/bad_reply_<Agent>_<ts>.txt` for diagnosis
+- Log every run to Notion under "Pipeline Tests" (see `.claude/memory/keep-notion-updated.md`)
+
+### Model behavior
+- `GROQ_PRIMARY_MODEL` (default `llama-3.3-70b-versatile`) is used first; on a daily-quota (TPD) 429 the harness auto-falls-back to `GROQ_FALLBACK_MODEL` and records `fallback_model_used` in the run log
+
 ## Available Skills (Slash Commands)
 | Command          | Purpose                                        |
 |------------------|------------------------------------------------|
