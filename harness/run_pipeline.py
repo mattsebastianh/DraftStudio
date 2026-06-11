@@ -39,34 +39,47 @@ def load_env():
 
 ENV = load_env()
 
+# Model used for the rest of the run once the primary model becomes
+# unavailable (e.g. daily token quota exhausted). Sticky across calls so we
+# don't re-trigger the same rate limit on every subsequent step.
+ACTIVE_MODEL = ENV["GROQ_PRIMARY_MODEL"]
+
 
 def chat(system_prompt, user_message, max_tokens, model=None):
-    payload = {
-        "model": model or ENV["GROQ_PRIMARY_MODEL"],
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": 0.6,
-    }
-    req = urllib.request.Request(
-        ENV["GROQ_BASE_URL"] + "/chat/completions",
-        data=json.dumps(payload).encode(),
-        headers={
-            "Authorization": "Bearer " + ENV["GROQ_API_KEY"],
-            "Content-Type": "application/json",
-            "User-Agent": "DraftStudio-harness/1.0",
-        },
-    )
+    global ACTIVE_MODEL
+    use_model = model or ACTIVE_MODEL
     started = time.time()
     for attempt in range(5):
+        payload = {
+            "model": use_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.6,
+        }
+        req = urllib.request.Request(
+            ENV["GROQ_BASE_URL"] + "/chat/completions",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Authorization": "Bearer " + ENV["GROQ_API_KEY"],
+                "Content-Type": "application/json",
+                "User-Agent": "DraftStudio-harness/1.0",
+            },
+        )
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 body = json.load(resp)
             break
         except urllib.error.HTTPError as err:
             detail = err.read().decode(errors="replace")[:300]
+            quota_exhausted = err.code == 429 and "tokens per day" in detail.lower()
+            if quota_exhausted and model is None and use_model != ENV["GROQ_FALLBACK_MODEL"]:
+                print(f"    {use_model} hit its daily token quota, falling back to {ENV['GROQ_FALLBACK_MODEL']}")
+                use_model = ENV["GROQ_FALLBACK_MODEL"]
+                ACTIVE_MODEL = use_model
+                continue
             retryable = err.code in (429, 500, 502, 503) or (
                 err.code == 400 and "tool_use_failed" in detail
             )
@@ -76,10 +89,18 @@ def chat(system_prompt, user_message, max_tokens, model=None):
             wait = float(err.headers.get("Retry-After") or 2 ** (attempt + 1))
             print(f"    HTTP {err.code}, retrying in {wait:.0f}s... ({detail})")
             time.sleep(wait)
+        except (urllib.error.URLError, TimeoutError, OSError) as err:
+            if attempt == 4:
+                print(f"    connection error: {err}")
+                raise
+            wait = 2 ** (attempt + 1)
+            print(f"    connection error, retrying in {wait:.0f}s... ({err})")
+            time.sleep(wait)
     return {
         "content": body["choices"][0]["message"]["content"],
         "usage": body.get("usage", {}),
         "seconds": round(time.time() - started, 1),
+        "model": use_model,
     }
 
 
@@ -163,13 +184,14 @@ def run_agent(agent, wire, message, format_instructions, max_tokens):
             "wire": wire,
             "input": message,
             "output": parsed,
+            "model": result["model"],
             "tokens": result["usage"].get("total_tokens"),
             "prompt_tokens": result["usage"].get("prompt_tokens"),
             "completion_tokens": result["usage"].get("completion_tokens"),
             "seconds": result["seconds"],
         }
     )
-    print(f"  {agent} done ({result['seconds']}s, {result['usage'].get('total_tokens')} tokens)")
+    print(f"  {agent} done ({result['seconds']}s, {result['usage'].get('total_tokens')} tokens, {result['model']})")
     return parsed
 
 
@@ -277,6 +299,8 @@ def main():
     log_dir = REPO / "tests" / "live_runs"
     log_dir.mkdir(exist_ok=True)
     log_path = log_dir / f"run_{run_id}.json"
+    if ACTIVE_MODEL != ENV["GROQ_PRIMARY_MODEL"]:
+        LOG["fallback_model_used"] = ACTIVE_MODEL
     log_path.write_text(json.dumps(LOG, indent=2) + "\n")
     print(f"\nRun log: {log_path.relative_to(REPO)}")
     if LOG.get("deliverable"):
@@ -284,4 +308,5 @@ def main():
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(line_buffering=True)
     main()
