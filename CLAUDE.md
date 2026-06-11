@@ -6,8 +6,8 @@ Each agent holds a specific, non-overlapping role within the agency.
 All agents are built with claude-code, powered by open-weight models served on Groq's fast inference platform.
 
 ## Primary Model
-- **GPT-OSS 120B** (`openai/gpt-oss-120b`, Groq API) — flagship agentic open-weight reasoning model
-- Fallback: `llama-3.3-70b-versatile` (cheap orchestration tasks)
+- **Llama 3.3 70B Versatile** (`llama-3.3-70b-versatile`, Groq API) — default for all agent calls
+- Fallback: `openai/gpt-oss-120b` — used automatically when the primary model's daily token quota is exhausted
 - Model IDs are set in `.env` (`GROQ_PRIMARY_MODEL`, `GROQ_FALLBACK_MODEL`) — change them there, not in configs
 
 ## Project Stack
