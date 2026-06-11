@@ -51,10 +51,10 @@ cp .env.example .env
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `GROQ_PRIMARY_MODEL` | `openai/gpt-oss-120b` | Flagship agentic reasoning model |
-| `GROQ_FALLBACK_MODEL` | `llama-3.3-70b-versatile` | Cheap orchestration tasks |
+| `GROQ_PRIMARY_MODEL` | `llama-3.3-70b-versatile` | Default model for all agent calls |
+| `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-120b` | Used automatically when the primary model's daily token quota (TPD) is exhausted |
 
-Swap models by editing `.env` — nothing else references model IDs. Note the primary is a reasoning model: give it a generous `max_tokens` budget, since reasoning tokens count against it.
+Swap models by editing `.env` — nothing else references model IDs. Note the fallback is a reasoning model: give it a generous `max_tokens` budget, since reasoning tokens count against it.
 
 ### Verify your connection
 
@@ -79,6 +79,21 @@ Open claude-code in the repo root. The studio is operated through five slash com
 
 **The workflow is spec-first:** `/spec-agent` → `/new-agent` → `/agent-wire` → `/agent-review`. Never scaffold without a spec, and address all Critical/High review findings before activating an agent.
 
+### Running the live pipeline
+
+`harness/run_pipeline.py` executes the full agent pipeline against the Groq API with real model calls:
+
+```bash
+python3 harness/run_pipeline.py "<raw client request>"
+```
+
+It routes the request through IntakeAgent → (ResearchAgent) → DraftAgent → ReviewAgent → DispatchAgent, including the revision loop (max 3 cycles, approval at ≥ 80/100) and human escalation. Each run writes:
+
+- a full I/O log to `tests/live_runs/run_<timestamp>.json` (per-step model, tokens, timing)
+- the approved deliverable to `deliverables/<slug>.md`
+
+The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies) and falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically (see `CLAUDE.md`) — no manual invocation needed.
+
 ## Repository Layout
 
 ```
@@ -87,9 +102,10 @@ agents/registry.yaml  ← Central registry: status, paths, and wires for every a
 wires/           ← Inter-agent communication contracts (YAML)
 specs/           ← Agent specs, written before scaffolding
 reviews/         ← Audit reports from /agent-review
-tests/           ← Pipeline test results
+harness/         ← Live execution harness (run_pipeline.py)
+tests/           ← Pipeline test results; live run logs in tests/live_runs/
 handoffs/        ← Session export dumps from /context-dump
-deliverables/    ← Sample outputs produced by the pipeline
+deliverables/    ← Outputs produced by the pipeline
 ```
 
 Every agent defines: Role, Goal, Backstory, Tools, Constraints, and Escalation rules. Tool definitions are JSON; system prompts are plain text and kept under 500 tokens.
@@ -98,7 +114,9 @@ Every agent defines: Role, Goal, Backstory, Tools, Constraints, and Escalation r
 
 All 5 agents are built, reviewed, pipeline-tested, and **active**. The full wire map (9 wires) passed static integration testing — see `tests/pipeline_test_results.md`.
 
-Planned v2 work: priority handling at intake, per-dimension quality scores, `client_id` propagation, multi-channel delivery, and a live end-to-end execution test against the Groq API.
+**Live execution is verified.** Eight live end-to-end runs against the Groq API have completed (scores 85–94/100), including real client-style draft requests delivered through the full pipeline. The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. One known gap: the ReviewAgent → DraftAgent revision loop and 3-cycle escalation have never fired live — every run so far has been approved on round 0 (run history in `tests/live_runs/` and the Notion "Pipeline Tests" page).
+
+Planned v2 work: priority handling at intake, `client_id` propagation, multi-channel delivery, and a trap brief that forces a sub-80 round-0 score to finally exercise the revision loop live.
 
 ## Design Principles
 
