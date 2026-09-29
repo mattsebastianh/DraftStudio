@@ -8,6 +8,11 @@ quality threshold 80, at most 3 revision cycles, then escalation.
 
 Check it with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
 
+Verified against: `n8n-nodes-base@2.41.2`, `@n8n/n8n-nodes-langchain@2.41.2` and `n8n-core@2.41.2`
+(the versions pinned by `n8n@2.41.3`, the current npm `latest`/`stable`), 2026-09-29. Every node type,
+typeVersion and top-level parameter name was checked against the published node descriptions; see
+`n8n/verify_notes.md`.
+
 ## Import
 
 1. In n8n: **Workflows -> Add workflow -> ... menu -> Import from File**, then choose
@@ -22,7 +27,7 @@ Check it with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline
 
 | Credential type | Name | Used by | Value |
 |---|---|---|---|
-| Groq API (`groqApi`) | `DraftStudio Groq` | Groq Intake, Groq Research, Groq Draft, Groq Review, Groq Dispatch | Your Groq API key |
+| Groq API (`groqApi`) | `DraftStudio Groq` | Groq Intake / Research / Draft / Review / Dispatch and Groq Fallback Intake / Research / Draft / Review / Dispatch | Your Groq API key |
 | Header Auth (`httpHeaderAuth`), optional | `DraftStudio Tavily` | Tavily Search | Name `Authorization`, value `Bearer <Tavily API key>` |
 
 If you don't set up Tavily, delete or disconnect the **Tavily Search** node. ResearchAgent
@@ -31,11 +36,18 @@ credential store.
 
 ## Models
 
-- Primary: `openai/gpt-oss-120b` on every Groq Chat Model node.
-- Fallback: `qwen/qwen3.8-27b`. This model is described in a sticky note but not wired in,
-  because the Basic LLM Chain / AI Agent versions used here have no fallback-model input.
-  When the primary model's daily quota runs out, change the model on the Groq nodes, or add
-  a fallback model if your n8n version's Agent/Chain node offers *Enable Fallback Model*.
+- Primary: `openai/gpt-oss-120b` on every `Groq <Agent>` Chat Model node.
+- Fallback: `qwen/qwen3.8-27b` on every `Groq Fallback <Agent>` node. Each chain/agent has
+  **Enable Fallback Model** on (`needsFallback: true`) and the fallback node is wired to its
+  second model input (*Fallback Model*, `ai_languageModel` index 1). If a call to the primary
+  model throws (for example a 429 when the daily token quota is exhausted), LangChain's
+  `withFallbacks` re-runs the same prompt on the fallback model. This needs Basic LLM Chain
+  >= 1.2 (1.5 is used) and AI Agent >= 2.1 (ResearchAgent uses 2.2).
+- Max output tokens (`maxTokensToSample`, sent to Groq as `max_tokens`) are sized for
+  reasoning models, which spend part of the budget on hidden reasoning: Intake 4000,
+  Research 12000, Draft 12000, Review 10000, Dispatch 3000. Primary and fallback nodes use
+  the same values. Temperature is 0.3.
+- n8n does not read `.env`. To change a model, edit the Model field on the Groq node.
 
 ## Request / response
 
@@ -90,7 +102,7 @@ in n8n's Executions list.
 ```
 Webhook (POST /draftstudio) ─┐
 Manual Trigger ──► Test Input ┴► Normalize Request
-  → IntakeAgent (Basic LLM Chain + Groq Intake + Intake Parser)
+  → IntakeAgent (Basic LLM Chain + Groq Intake + Groq Fallback Intake + Intake Parser)
   → Needs Research?
        true  → ResearchAgent (AI Agent + Groq Research + Wikipedia + Tavily Search) → Build Draft Input
        false → Build Draft Input
@@ -119,7 +131,10 @@ Manual Trigger ──► Test Input ┴► Normalize Request
   delivery_note,status}}`. Each chain's result is at `$json.output`. Severity and status are
   plain strings rather than enums, so a capitalised value doesn't fail parsing. The verdict
   compares severities without regard to case.
-- **Research:** ResearchAgent is a Tools Agent (max 6 iterations) with no output parser. Its
+- **Fallback models:** every chain/agent also has a `Groq Fallback <Agent>` model node (see
+  Models). The flow diagram leaves them out.
+- **Research:** ResearchAgent is an AI Agent v2.2 (always a Tools Agent; max 6 iterations)
+  with no output parser. Its
   final text (a JSON dossier) is stored as the string `dossier` in Build Draft Input. When
   research is skipped, `dossier` is empty and DraftAgent is told to state its limitations.
 - **Retries:** every chain/agent node has Retry On Fail (3 tries, 3 s apart). This matches
@@ -135,13 +150,16 @@ state back together by referencing earlier nodes by name:
 | Normalize Request | `raw_request`, `round = 0`, `run_id`, `issues = []` |
 | Build Draft Input | `raw_request`, `run_id`, `brief`, `work_type`, `dossier`, `round`, `issues`, `previous_draft = {}`. It reads `$('Normalize Request').first()`, `$('IntakeAgent').first()` and, if it ran, `$('ResearchAgent').first()`, so it works whichever IF branch it came from |
 | Deterministic Checks | constant state from `$('Build Draft Input').first()`, the current `round` (`$('Prepare Revision').last().json.round` once a revision has happened, else 0), `draft`, plus the check results |
-| Compute Verdict | everything from `$('Deterministic Checks').item`, plus `review`, `score`, `critical_count`, merged `issues`, `approved` |
+| Compute Verdict | everything from `$('Deterministic Checks').last()`, plus `review`, `score`, `critical_count`, merged `issues`, `approved` |
 | Prepare Revision | same shape as Build Draft Input with `round + 1`, `issues` and `previous_draft` (plus `last_score`) |
 
 Build Draft Input and Prepare Revision output the same shape, so DraftAgent's prompt uses
 `$json` whichever of the two fed it. `.first()` is only used on nodes that run once per
-execution. Inside the loop, `.item` (paired items) and `.last()` (latest run) give the
-current cycle's values.
+execution. Inside the loop, `.last()` (the node's latest run) gives the current cycle's
+values: Compute Verdict reads `$('Deterministic Checks').last()` and Respond Delivered reads
+`$('Compute Verdict').last()`. `.last()` is used instead of paired-item `.item` because
+paired-item lookups back through a loop are fragile, and with one item per run the latest
+run is the current cycle.
 
 ## The revision loop and the 3-cycle cap
 
@@ -192,30 +210,38 @@ them to ReviewAgent as facts:
 
 - **Respond nodes on the manual path:** when you start from the Manual Trigger, there is no
   HTTP request to answer. Inspect the final node's output in the editor instead.
-- **Hanging webhook on hard errors:** if an LLM node still fails after its retries (Groq
-  outage, quota exhausted, or output that fails the schema 3 times), the execution stops
+- **Hanging webhook on hard errors:** if an LLM node still fails after its retries and its
+  fallback model (Groq outage, both models' quotas exhausted, or output that fails the schema
+  3 times), the execution stops
   before a Respond node runs. The caller then gets n8n's error or timeout, not an
   `escalated` body. Look in the Executions list, or add an Error Workflow.
 - **Webhook timeouts:** a full run with 3 revisions can take several minutes. Reverse
   proxies or clients in front of n8n may time out first.
-- **Loop references:** the loop depends on `$('Prepare Revision').isExecuted` / `.last()` and
-  on paired-item `.item` references working across repeated runs of the same node. Keep
-  exactly one item flowing through the workflow. The design assumes a single request per
+- **Loop references:** the loop depends on `$('Prepare Revision').isExecuted` and on
+  `.last()` returning the latest run of a node that runs once per cycle. Keep exactly one
+  item flowing through the workflow. The design assumes a single request per
   execution.
-- **Model/tool support:** ResearchAgent needs a model that supports tool calling
-  (`openai/gpt-oss-120b` on Groq does). The Structured Output Parser relies on the model
+- **Model/tool support:** ResearchAgent needs models that support tool calling, both the
+  primary (`openai/gpt-oss-120b` on Groq does) and the fallback (check that
+  `qwen/qwen3.8-27b` supports tool use on Groq; the Tools Agent rejects a chat model without
+  `bindTools`). The Structured Output Parser relies on the model
   following the format instructions n8n adds to the prompt.
-- **Curly braces:** LangChain prompt templates treat `{...}` as variables. The Intake,
-  Draft, Review and Dispatch system prompts (Basic LLM Chain system-message templates)
-  contain no braces. `agents/ResearchAgent/system_prompt.txt` does contain one
-  (`{claim, sources, confidence (0-100), notes}`, line 12). That is safe as long as it stays
-  in the AI Agent's Options -> System Message, which the Tools Agent passes as a variable.
-  If you move that prompt into a Basic LLM Chain system message, it breaks: escape the braces
-  as `{{`/`}}` or reword them. Keep any prompt pasted into a chain's system message free of
-  braces. Dynamic values (brief JSON, draft text) go into the user prompt, which n8n passes
-  as a variable rather than as template text.
+- **Curly braces:** braces in prompts are safe in the verified versions. The Basic LLM
+  Chain doubles every `{`/`}` in its Chat Messages before building the LangChain template,
+  and the user prompt is passed in as the `{query}` variable. The AI Agent passes its
+  system message as the `{system_message}` variable and the prompt as `{input}`. So
+  `agents/ResearchAgent/system_prompt.txt` line 12 (`{claim, sources, confidence (0-100),
+  notes}`) works in either node. Do not escape braces by hand (`{{` would reach the model
+  as a literal `{{`). Remember that n8n treats `{{ ... }}` as an expression in any field
+  that starts with `=`.
 - **Prompt drift:** system prompts are copies (see Prompts above). Editing
   `agents/*/system_prompt.txt` does not update the workflow automatically.
-- **Tavily tool:** `toolHttpRequest` (HTTP Request Tool) is a legacy node in recent n8n
-  versions. If your instance hides it, replace it with the newer HTTP Request tool, using
-  the same URL, header credential and a `query` body field filled by the model.
+- **Tavily tool:** `toolHttpRequest` v1.1 (HTTP Request Tool) still loads and runs in
+  n8n 2.41, but it is marked `hidden`: it is no longer offered in the node picker, and n8n
+  recommends the HTTP Request node used as a tool (`n8n-nodes-base.httpRequestTool`). The
+  body uses **Specify Body: Using Fields Below** with a single `query` field
+  (*By Model (and is required)*). The node sets the model's value as a real JSON value, so
+  quotes or backslashes in a query cannot break the request body. A JSON-template body with
+  `"{query}"` would do a raw text substitution with no escaping. Tavily's defaults
+  (`max_results` 5, `search_depth` "basic") apply. To move to `httpRequestTool`, use the same
+  URL, header credential and a `query` body field filled by `$fromAI('query')`.

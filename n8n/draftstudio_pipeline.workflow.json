@@ -35,7 +35,7 @@
     },
     {
       "parameters": {
-        "content": "## Models\n- **Primary:** `openai/gpt-oss-120b` on every Groq Chat Model node.\n- **Fallback:** `qwen/qwen3.8-27b`. Not wired: the chain/agent node versions used here have no fallback-model input. If your n8n version offers *Enable Fallback Model* on the AI Agent / Basic LLM Chain, add a second Groq node with this model; otherwise switch the model on the Groq nodes manually when the primary daily quota is exhausted.",
+        "content": "## Models\n- **Primary:** `openai/gpt-oss-120b` on every `Groq <Agent>` Chat Model node.\n- **Fallback:** `qwen/qwen3.8-27b` on every `Groq Fallback <Agent>` node, wired to the *Fallback Model* input (Enable Fallback Model = on). If the primary call fails (e.g. daily quota exhausted / 429), LangChain retries the same prompt on the fallback model.\n- Both use the **DraftStudio Groq** credential. To change a model, edit the Model field on the Groq node; the IDs in `.env` are not read by n8n.",
         "height": 380,
         "width": 520,
         "color": 3
@@ -150,6 +150,7 @@
         "promptType": "define",
         "text": "=Incoming message on wire `client_to_IntakeAgent`.\n\nRaw client request:\n{{ $json.raw_request }}\n\nParse and classify this request. Return the structured brief (topic, audience, tone, length, key_points, format), work_type (research_only, draft_from_scratch, draft_from_research, full_service or revision), needs_research (boolean: true when the deliverable needs facts beyond the request itself) and routing_plan (ordered array of agent names).\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
         "hasOutputParser": true,
+        "needsFallback": true,
         "messages": {
           "messageValues": [
             {
@@ -175,7 +176,7 @@
       "parameters": {
         "model": "openai/gpt-oss-120b",
         "options": {
-          "maxTokensToSample": 3000,
+          "maxTokensToSample": 4000,
           "temperature": 0.3
         }
       },
@@ -184,7 +185,30 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        620,
+        580,
+        520
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3.8-27b",
+        "options": {
+          "maxTokensToSample": 4000,
+          "temperature": 0.3
+        }
+      },
+      "id": "33d44c4f-4a66-5360-8939-ef968d574a5e",
+      "name": "Groq Fallback Intake",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        720,
         520
       ],
       "credentials": {
@@ -204,7 +228,7 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
       "position": [
-        780,
+        860,
         520
       ]
     },
@@ -245,9 +269,9 @@
     },
     {
       "parameters": {
-        "agent": "toolsAgent",
         "promptType": "define",
         "text": "=Incoming message on wire `IntakeAgent_to_ResearchAgent`.\n\nTopic: {{ $json.output.brief.topic }}\nAudience: {{ $json.output.brief.audience }}\nFocus areas:\n{{ ($json.output.brief.key_points || []).map(p => '- ' + p).join('\\n') }}\n\nYour web_search step maps to the tools available here: Wikipedia and Tavily_Search (at most 5 searches in total). Compile the research dossier and return it as JSON with keys: dossier.topic, dossier.findings (array of claim, sources, confidence 0-100), dossier.gaps (array), dossier.confidence (0-100 overall), dossier.sources (array of url and title). Never invent sources; mark low confidence where evidence is thin.",
+        "needsFallback": true,
         "options": {
           "systemMessage": "You are ResearchAgent, the agency's senior researcher. Your job is to investigate topics and return structured research dossiers with sourced findings.\n\nGOAL: Produce comprehensive, accurate, well-sourced research summaries that serve as the factual foundation for all downstream work.\n\nWORKFLOW:\n1. Use web_search to find sources on the given topic\n2. Use extract_facts to pull key claims, data points, and evidence from sources\n3. Use compile_dossier to assemble findings into a structured dossier\n\nOUTPUT FORMAT — always return a dossier with:\n- topic: the researched subject\n- findings: array of {claim, sources, confidence (0-100), notes}\n- gaps: array of unanswered questions\n- confidence: overall dossier confidence (0-100)\n- sources: full source list with URLs and titles\n\nHARD RULES:\n- Cite every claim with at least one source\n- Assign confidence 0-100 to every finding\n- Always include gaps — be honest about what you could not find\n- Never fabricate sources or invent data\n- If overall confidence < 60%, escalate to human before delivering\n- Maximum 5 web_search attempts per topic — if results are still poor after 5 attempts, escalate\n\nESCALATE TO HUMAN WHEN:\n- No sources found after 3 attempts\n- Topic requires specialized domain expertise\n- Contradictory sources with no clear resolution",
           "maxIterations": 6
@@ -256,7 +280,7 @@
       "id": "bb44bd03-7195-5b6f-82a3-ef736f503a97",
       "name": "ResearchAgent",
       "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
+      "typeVersion": 2.2,
       "position": [
         1180,
         -100
@@ -269,7 +293,7 @@
       "parameters": {
         "model": "openai/gpt-oss-120b",
         "options": {
-          "maxTokensToSample": 6000,
+          "maxTokensToSample": 12000,
           "temperature": 0.3
         }
       },
@@ -278,7 +302,30 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        1100,
+        1040,
+        120
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3.8-27b",
+        "options": {
+          "maxTokensToSample": 12000,
+          "temperature": 0.3
+        }
+      },
+      "id": "eb42ad06-e344-5928-be6c-25ee42ee5cdf",
+      "name": "Groq Fallback Research",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1160,
         120
       ],
       "credentials": {
@@ -295,7 +342,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolWikipedia",
       "typeVersion": 1,
       "position": [
-        1240,
+        1300,
         120
       ]
     },
@@ -307,8 +354,15 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "{\"query\": \"{query}\", \"max_results\": 5, \"search_depth\": \"basic\"}",
+        "specifyBody": "keypair",
+        "parametersBody": {
+          "values": [
+            {
+              "name": "query",
+              "valueProvider": "modelRequired"
+            }
+          ]
+        },
         "placeholderDefinitions": {
           "values": [
             {
@@ -324,7 +378,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        1380,
+        1440,
         120
       ],
       "credentials": {
@@ -406,6 +460,7 @@
         "promptType": "define",
         "text": "={{ $json.round > 0 ? 'Incoming message on wire `ReviewAgent_to_DraftAgent` (revision_round ' + $json.round + ').' : 'Incoming message on wire `IntakeAgent_to_DraftAgent`.' }}\n\nBrief:\n{{ JSON.stringify($json.brief, null, 2) }}\n\nResearch dossier:\n{{ $json.dossier || '(none: no research was run for this request; state limitations and flag unsupported claims)' }}{{ $json.round > 0 ? '\\n\\nPrevious draft (revise this):\\n' + $json.previous_draft.content + '\\n\\nIssues to resolve:\\n' + $json.issues.map(i => '- [' + i.severity + '] ' + i.description + ' | suggested fix: ' + i.suggested_fix).join('\\n') : '' }}\n\n{{ $json.round > 0 ? 'Revise the draft to resolve every issue.' : 'Write the full deliverable per the brief.' }} Return title, content (the complete deliverable in markdown, meeting the brief's length) and word_count. No placeholder text such as [Insert ...], TODO or TBD.\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
         "hasOutputParser": true,
+        "needsFallback": true,
         "messages": {
           "messageValues": [
             {
@@ -431,7 +486,7 @@
       "parameters": {
         "model": "openai/gpt-oss-120b",
         "options": {
-          "maxTokensToSample": 4500,
+          "maxTokensToSample": 12000,
           "temperature": 0.3
         }
       },
@@ -440,7 +495,30 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        1720,
+        1680,
+        520
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3.8-27b",
+        "options": {
+          "maxTokensToSample": 12000,
+          "temperature": 0.3
+        }
+      },
+      "id": "29305a04-aa19-5f36-97b9-d4594ff58be3",
+      "name": "Groq Fallback Draft",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1820,
         520
       ],
       "credentials": {
@@ -460,7 +538,7 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
       "position": [
-        1880,
+        1960,
         520
       ]
     },
@@ -542,6 +620,7 @@
         "promptType": "define",
         "text": "=Incoming message on wire `DraftAgent_to_ReviewAgent` (revision_round {{ $json.round }}).\n\nBrief:\n{{ JSON.stringify($json.brief, null, 2) }}\n\nDraft title: {{ $json.draft.title }}\nDraft (markdown):\n{{ $json.draft.content }}\n\nDeterministic checks computed by the workflow (treat as facts):\n- measured word_count: {{ $json.word_count }} (draft self-reported {{ $json.draft.word_count }})\n- length within 15% of the brief's word target: {{ $json.length_ok }}\n- placeholder text detected: {{ $json.has_placeholder }}\n\nEvaluate the draft against the brief. Return dimension_scores (clarity, accuracy, completeness, tone_alignment, each 0-100), score (composite 0-100, consistent with the dimensions), requirements (array of requirement + passed boolean), issues (array of severity critical/high/medium/low, description, suggested_fix; empty if nothing to flag) and status (derive it mechanically: \"approved\" when score >= 80 and no issue is critical, else \"revision_required\"; non-critical issues do not block approval).\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
         "hasOutputParser": true,
+        "needsFallback": true,
         "messages": {
           "messageValues": [
             {
@@ -567,7 +646,7 @@
       "parameters": {
         "model": "openai/gpt-oss-120b",
         "options": {
-          "maxTokensToSample": 4500,
+          "maxTokensToSample": 10000,
           "temperature": 0.3
         }
       },
@@ -576,7 +655,30 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        2240,
+        2200,
+        520
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3.8-27b",
+        "options": {
+          "maxTokensToSample": 10000,
+          "temperature": 0.3
+        }
+      },
+      "id": "1c03e4ec-6ea4-504a-b4ce-4c8e57065cad",
+      "name": "Groq Fallback Review",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2340,
         520
       ],
       "credentials": {
@@ -596,7 +698,7 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
       "position": [
-        2400,
+        2480,
         520
       ]
     },
@@ -608,55 +710,55 @@
             {
               "id": "c63a039c-4e07-5c20-ad26-d3188b01d2dd",
               "name": "raw_request",
-              "value": "={{ $('Deterministic Checks').item.json.raw_request }}",
+              "value": "={{ $('Deterministic Checks').last().json.raw_request }}",
               "type": "string"
             },
             {
               "id": "652e6416-ea9c-5edb-b9c7-ad0b8675911a",
               "name": "run_id",
-              "value": "={{ $('Deterministic Checks').item.json.run_id }}",
+              "value": "={{ $('Deterministic Checks').last().json.run_id }}",
               "type": "string"
             },
             {
               "id": "f31f1c46-465c-59cb-b3d8-e9bbb69baad7",
               "name": "brief",
-              "value": "={{ $('Deterministic Checks').item.json.brief }}",
+              "value": "={{ $('Deterministic Checks').last().json.brief }}",
               "type": "object"
             },
             {
               "id": "4cb29977-75d2-52ca-986a-c915d214976a",
               "name": "dossier",
-              "value": "={{ $('Deterministic Checks').item.json.dossier }}",
+              "value": "={{ $('Deterministic Checks').last().json.dossier }}",
               "type": "string"
             },
             {
               "id": "03d93724-926b-5f6b-89d6-db93a23e5a89",
               "name": "round",
-              "value": "={{ $('Deterministic Checks').item.json.round }}",
+              "value": "={{ $('Deterministic Checks').last().json.round }}",
               "type": "number"
             },
             {
               "id": "ac6a6da3-4db7-58b5-894e-f4e1d36d7d40",
               "name": "draft",
-              "value": "={{ $('Deterministic Checks').item.json.draft }}",
+              "value": "={{ $('Deterministic Checks').last().json.draft }}",
               "type": "object"
             },
             {
               "id": "8dbe5e9b-a19c-57a3-9937-daf7e0b25e4b",
               "name": "word_count",
-              "value": "={{ $('Deterministic Checks').item.json.word_count }}",
+              "value": "={{ $('Deterministic Checks').last().json.word_count }}",
               "type": "number"
             },
             {
               "id": "eef352dc-c90f-5f38-b415-36bcdb3f13ee",
               "name": "has_placeholder",
-              "value": "={{ $('Deterministic Checks').item.json.has_placeholder }}",
+              "value": "={{ $('Deterministic Checks').last().json.has_placeholder }}",
               "type": "boolean"
             },
             {
               "id": "0d2ccb64-485d-5e50-8f5d-a9b5a657775d",
               "name": "length_ok",
-              "value": "={{ $('Deterministic Checks').item.json.length_ok }}",
+              "value": "={{ $('Deterministic Checks').last().json.length_ok }}",
               "type": "boolean"
             },
             {
@@ -680,13 +782,13 @@
             {
               "id": "be8f3edb-0c24-560c-8c21-636bc91ea6c1",
               "name": "issues",
-              "value": "={{ ($json.output.issues || []).concat(\n  $('Deterministic Checks').item.json.has_placeholder ? [ { severity: 'critical', description: 'Placeholder text detected in the draft (e.g. [Insert ...], TODO, TBD, lorem ipsum).', suggested_fix: 'Replace every placeholder with real content or remove it.' } ] : [],\n  $('Deterministic Checks').item.json.length_ok ? [] : [ { severity: 'high', description: 'Measured word count ' + $('Deterministic Checks').item.json.word_count + ' is outside 15% of the brief length (' + $('Deterministic Checks').item.json.brief.length + ').', suggested_fix: 'Expand or trim the draft to the requested length.' } ]\n) }}",
+              "value": "={{ ($json.output.issues || []).concat(\n  $('Deterministic Checks').last().json.has_placeholder ? [ { severity: 'critical', description: 'Placeholder text detected in the draft (e.g. [Insert ...], TODO, TBD, lorem ipsum).', suggested_fix: 'Replace every placeholder with real content or remove it.' } ] : [],\n  $('Deterministic Checks').last().json.length_ok ? [] : [ { severity: 'high', description: 'Measured word count ' + $('Deterministic Checks').last().json.word_count + ' is outside 15% of the brief length (' + $('Deterministic Checks').last().json.brief.length + ').', suggested_fix: 'Expand or trim the draft to the requested length.' } ]\n) }}",
               "type": "array"
             },
             {
               "id": "a2b247ed-ad3d-5954-b4af-c6993af6de35",
               "name": "approved",
-              "value": "={{ Number($json.output.score) >= 80 && !$('Deterministic Checks').item.json.has_placeholder && (($json.output.issues || []).filter(i => String(i.severity).toLowerCase() === 'critical').length) === 0 }}",
+              "value": "={{ Number($json.output.score) >= 80 && !$('Deterministic Checks').last().json.has_placeholder && (($json.output.issues || []).filter(i => String(i.severity).toLowerCase() === 'critical').length) === 0 }}",
               "type": "boolean"
             }
           ]
@@ -743,6 +845,7 @@
         "promptType": "define",
         "text": "=Incoming message on wire `ReviewAgent_to_DispatchAgent`.\n\nDraft title: {{ $json.draft.title }}\nReview summary: score {{ $json.score }}, review_status approved, revision rounds used {{ $json.round }}.\nResearch dossier attached: {{ $json.dossier ? 'yes' : 'no' }}\n\nPackage this approved deliverable. Return title, delivery_note (short client-facing note) and status. Do not alter the approved content.\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
         "hasOutputParser": true,
+        "needsFallback": true,
         "messages": {
           "messageValues": [
             {
@@ -768,7 +871,7 @@
       "parameters": {
         "model": "openai/gpt-oss-120b",
         "options": {
-          "maxTokensToSample": 2000,
+          "maxTokensToSample": 3000,
           "temperature": 0.3
         }
       },
@@ -777,7 +880,30 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        2980,
+        2940,
+        280
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3.8-27b",
+        "options": {
+          "maxTokensToSample": 3000,
+          "temperature": 0.3
+        }
+      },
+      "id": "dcb1c371-392b-52a4-8804-00d39490f376",
+      "name": "Groq Fallback Dispatch",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        3080,
         280
       ],
       "credentials": {
@@ -797,14 +923,14 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
       "position": [
-        3140,
+        3220,
         280
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'delivered', run_id: $('Compute Verdict').item.json.run_id, score: $('Compute Verdict').item.json.score, rounds: $('Compute Verdict').item.json.round, title: $json.output.package.title || $('Compute Verdict').item.json.draft.title, deliverable: $('Compute Verdict').item.json.draft.content, delivery_note: $json.output.package.delivery_note, package_status: $json.output.package.status, issues: $('Compute Verdict').item.json.issues }) }}",
+        "responseBody": "={{ JSON.stringify({ status: 'delivered', run_id: $('Compute Verdict').last().json.run_id, score: $('Compute Verdict').last().json.score, rounds: $('Compute Verdict').last().json.round, title: $json.output.package.title || $('Compute Verdict').last().json.draft.title, deliverable: $('Compute Verdict').last().json.draft.content, delivery_note: $json.output.package.delivery_note, package_status: $json.output.package.status, issues: $('Compute Verdict').last().json.issues }) }}",
         "options": {
           "responseCode": 200
         }
@@ -1152,6 +1278,17 @@
         ]
       ]
     },
+    "Groq Fallback Intake": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "IntakeAgent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
     "Intake Parser": {
       "ai_outputParser": [
         [
@@ -1170,6 +1307,17 @@
             "node": "ResearchAgent",
             "type": "ai_languageModel",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Fallback Research": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ResearchAgent",
+            "type": "ai_languageModel",
+            "index": 1
           }
         ]
       ]
@@ -1207,6 +1355,17 @@
         ]
       ]
     },
+    "Groq Fallback Draft": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "DraftAgent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
     "Draft Parser": {
       "ai_outputParser": [
         [
@@ -1229,6 +1388,17 @@
         ]
       ]
     },
+    "Groq Fallback Review": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ReviewAgent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
     "Review Parser": {
       "ai_outputParser": [
         [
@@ -1247,6 +1417,17 @@
             "node": "DispatchAgent",
             "type": "ai_languageModel",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Fallback Dispatch": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "DispatchAgent",
+            "type": "ai_languageModel",
+            "index": 1
           }
         ]
       ]
