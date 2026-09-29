@@ -514,7 +514,7 @@
             {
               "id": "8bcc2c0a-d2b0-567f-a9b3-13c3d53cef49",
               "name": "has_placeholder",
-              "value": "={{ /\\[(?:insert|add|todo|tbd|placeholder|your |company name|name|date)[^\\]]*\\]|\\bTODO\\b|\\bTBD\\b|lorem ipsum/i.test($json.output.draft.content || '') }}",
+              "value": "={{ /\\[(?:insert|add)\\b[^\\]]*\\](?!\\()|\\[(?:name|date|company name|todo|tbd|placeholder|your [^\\]]+)\\](?!\\()|\\bTODO\\b|\\bTBD\\b|\\bX{3,}\\b|lorem ipsum/i.test($json.output.draft.content || '') }}",
               "type": "boolean"
             },
             {
