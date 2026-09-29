@@ -1,0 +1,1272 @@
+{
+  "name": "DraftStudio Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## DraftStudio Pipeline (n8n)\nIntake -> Research (optional) -> Draft <-> Review -> Dispatch, built only from n8n built-in nodes.\n\n- **Trigger:** `POST /webhook/draftstudio` with body `{\"request\": \"...\"}`, or Manual Trigger + Test Input.\n- **Gate:** approved when score >= 80, no critical issue and no placeholder text (Compute Verdict).\n- **Loop:** Prepare Revision feeds DraftAgent again; at most 3 revision cycles (Rounds Left?).\n- **Responses:** `delivered` (Respond Delivered) or `escalated` (Respond Escalated, HTTP 200).\n- System prompts were copied from `agents/<Agent>/system_prompt.txt` at build time; re-copy after editing them.\n\nSee `docs/n8n_workflow_design.md`.",
+        "height": 380,
+        "width": 640,
+        "color": 7
+      },
+      "id": "2bfb2ef2-40a2-5875-9560-73b67d398c0b",
+      "name": "Notes: Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node.\n2. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disconnect Tavily Search; ResearchAgent still has Wikipedia.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
+        "height": 380,
+        "width": 520,
+        "color": 5
+      },
+      "id": "c9633acb-7e61-5f2d-a244-4b89fd3c3d03",
+      "name": "Notes: Credentials",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Models\n- **Primary:** `openai/gpt-oss-120b` on every Groq Chat Model node.\n- **Fallback:** `qwen/qwen3.8-27b`. Not wired: the chain/agent node versions used here have no fallback-model input. If your n8n version offers *Enable Fallback Model* on the AI Agent / Basic LLM Chain, add a second Groq node with this model; otherwise switch the model on the Groq nodes manually when the primary daily quota is exhausted.",
+        "height": 380,
+        "width": 520,
+        "color": 3
+      },
+      "id": "6bac6fa6-be09-5ef8-ab16-5bc08e643613",
+      "name": "Notes: Fallback model",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        -560
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "draftstudio",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "75d3eb80-1823-51bd-b7e4-b7c9c070ea43",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ],
+      "webhookId": "b8177b38-9712-5a15-ac65-c96456600680"
+    },
+    {
+      "parameters": {},
+      "id": "2f763897-cc14-5217-9786-5b55a4a3c682",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d50ace14-d569-51a6-9178-6478c1bc3514",
+              "name": "body",
+              "value": "{\"request\": \"Write a one-page internal memo to all employees announcing our updated vacation policy: 20 days of paid time off per year, up to 5 unused days can be carried over, and requests go through the HR portal at least two weeks in advance. Friendly but clear tone, about 300 words.\"}",
+              "type": "object"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "6bd98789-8336-549b-95bd-ab5293ca887c",
+      "name": "Test Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4ab756b7-26ab-5dc4-a519-8b61887872ee",
+              "name": "raw_request",
+              "value": "={{ $json.body.request }}",
+              "type": "string"
+            },
+            {
+              "id": "2eac2047-22dc-5a92-afdd-a908f64b0e6f",
+              "name": "round",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "33eeb6e9-311e-5e8f-aebd-e791c5ab5c25",
+              "name": "run_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "7c38dbeb-13b5-58c6-a58c-2f10617e5f68",
+              "name": "issues",
+              "value": "={{ [] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "6bbf93cf-72f9-56cd-801c-c43d3320d401",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Incoming message on wire `client_to_IntakeAgent`.\n\nRaw client request:\n{{ $json.raw_request }}\n\nParse and classify this request. Return the structured brief (topic, audience, tone, length, key_points, format), work_type (research_only, draft_from_scratch, draft_from_research, full_service or revision), needs_research (boolean: true when the deliverable needs facts beyond the request itself) and routing_plan (ordered array of agent names).\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are IntakeAgent, the agency's intake coordinator. Your job is to receive raw client requests, structure them into actionable briefs, classify work type, and route to the right agent.\n\nGOAL: Transform ambiguous, informal client requests into clear, complete briefs so downstream agents always have well-defined inputs.\n\nWORKFLOW:\n1. Use parse_request to extract topic, intent, constraints, output preferences, and deadline from raw input\n2. Use classify_work to determine the work type (research_only, draft_from_scratch, draft_from_research, full_service, revision) and which agents are needed\n3. Use route_task to send the structured brief to the appropriate agent(s) in correct sequence\n\nOUTPUT FORMAT — always return a structured brief with:\n- topic: the core subject or question\n- audience: target audience for the deliverable\n- tone: desired tone\n- length: target length range\n- key_points: key points to cover\n- format: desired output format\nPlus work_type classification and routing_plan (ordered agent list).\n\nHARD RULES:\n- Never route a request without a topic — if parse_request fails to extract a topic, ask the client for clarification immediately\n- Always classify before routing\n- Ask for clarification if the request is vague — do not guess\n- Only route to agents that exist in the registry\n- Never skip classification even for obvious requests\n\nESCALATE TO HUMAN WHEN:\n- Request too vague to classify after parsing\n- Request falls outside agency capabilities\n- Multiple interpretations possible — present options"
+            }
+          ]
+        }
+      },
+      "id": "d9b35d88-ec30-5229-baaf-b9fc60eff1c2",
+      "name": "IntakeAgent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "maxTokensToSample": 3000,
+          "temperature": 0.3
+        }
+      },
+      "id": "b8b802fd-f3fc-5621-a976-13bc975c506b",
+      "name": "Groq Intake",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        620,
+        520
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"brief\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"topic\": {\n          \"type\": \"string\"\n        },\n        \"audience\": {\n          \"type\": \"string\"\n        },\n        \"tone\": {\n          \"type\": \"string\"\n        },\n        \"length\": {\n          \"type\": \"string\",\n          \"description\": \"Target length, e.g. '300-400 words'\"\n        },\n        \"key_points\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\"\n          }\n        },\n        \"format\": {\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"topic\",\n        \"audience\",\n        \"tone\",\n        \"length\",\n        \"key_points\",\n        \"format\"\n      ]\n    },\n    \"work_type\": {\n      \"type\": \"string\",\n      \"description\": \"research_only | draft_from_scratch | draft_from_research | full_service | revision\"\n    },\n    \"needs_research\": {\n      \"type\": \"boolean\"\n    },\n    \"routing_plan\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    }\n  },\n  \"required\": [\n    \"brief\",\n    \"work_type\",\n    \"needs_research\",\n    \"routing_plan\"\n  ]\n}"
+      },
+      "id": "f0d77c8e-3f86-5210-9c96-4b0b9b202ec6",
+      "name": "Intake Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        780,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ccd4a513-b2bb-5527-96f5-0c067c51d58d",
+              "leftValue": "={{ $json.output.needs_research }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "47b1f0c8-b123-5aba-bd1a-a469068a86b8",
+      "name": "Needs Research?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "agent": "toolsAgent",
+        "promptType": "define",
+        "text": "=Incoming message on wire `IntakeAgent_to_ResearchAgent`.\n\nTopic: {{ $json.output.brief.topic }}\nAudience: {{ $json.output.brief.audience }}\nFocus areas:\n{{ ($json.output.brief.key_points || []).map(p => '- ' + p).join('\\n') }}\n\nYour web_search step maps to the tools available here: Wikipedia and Tavily_Search (at most 5 searches in total). Compile the research dossier and return it as JSON with keys: dossier.topic, dossier.findings (array of claim, sources, confidence 0-100), dossier.gaps (array), dossier.confidence (0-100 overall), dossier.sources (array of url and title). Never invent sources; mark low confidence where evidence is thin.",
+        "options": {
+          "systemMessage": "You are ResearchAgent, the agency's senior researcher. Your job is to investigate topics and return structured research dossiers with sourced findings.\n\nGOAL: Produce comprehensive, accurate, well-sourced research summaries that serve as the factual foundation for all downstream work.\n\nWORKFLOW:\n1. Use web_search to find sources on the given topic\n2. Use extract_facts to pull key claims, data points, and evidence from sources\n3. Use compile_dossier to assemble findings into a structured dossier\n\nOUTPUT FORMAT — always return a dossier with:\n- topic: the researched subject\n- findings: array of {claim, sources, confidence (0-100), notes}\n- gaps: array of unanswered questions\n- confidence: overall dossier confidence (0-100)\n- sources: full source list with URLs and titles\n\nHARD RULES:\n- Cite every claim with at least one source\n- Assign confidence 0-100 to every finding\n- Always include gaps — be honest about what you could not find\n- Never fabricate sources or invent data\n- If overall confidence < 60%, escalate to human before delivering\n- Maximum 5 web_search attempts per topic — if results are still poor after 5 attempts, escalate\n\nESCALATE TO HUMAN WHEN:\n- No sources found after 3 attempts\n- Topic requires specialized domain expertise\n- Contradictory sources with no clear resolution",
+          "maxIterations": 6
+        }
+      },
+      "id": "bb44bd03-7195-5b6f-82a3-ef736f503a97",
+      "name": "ResearchAgent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1180,
+        -100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "maxTokensToSample": 6000,
+          "temperature": 0.3
+        }
+      },
+      "id": "1ae8aead-2b7b-5404-9c43-06deb9ed67e8",
+      "name": "Groq Research",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        120
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "add35ef0-50cf-584a-baba-5fc35c465d67",
+      "name": "Wikipedia",
+      "type": "@n8n/n8n-nodes-langchain.toolWikipedia",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Search the live web with Tavily. Input: a concise search query. Returns result titles, URLs and content snippets to cite.",
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\": \"{query}\", \"max_results\": 5, \"search_depth\": \"basic\"}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "The web search query to run",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "7b5e4256-5f23-5989-810c-8761dd94f4e9",
+      "name": "Tavily Search",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1380,
+        120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Tavily"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "62e7eaf0-ecd2-5470-b449-b16d96c292ba",
+              "name": "raw_request",
+              "value": "={{ $('Normalize Request').first().json.raw_request }}",
+              "type": "string"
+            },
+            {
+              "id": "88430c29-ea87-50bc-a065-24d4dae992a8",
+              "name": "run_id",
+              "value": "={{ $('Normalize Request').first().json.run_id }}",
+              "type": "string"
+            },
+            {
+              "id": "11c41364-f66b-5c2f-808d-7dcf5512a5be",
+              "name": "brief",
+              "value": "={{ $('IntakeAgent').first().json.output.brief }}",
+              "type": "object"
+            },
+            {
+              "id": "01817b1c-458c-52c8-b1c6-1bb32ce9938b",
+              "name": "work_type",
+              "value": "={{ $('IntakeAgent').first().json.output.work_type }}",
+              "type": "string"
+            },
+            {
+              "id": "a52db5f8-1cbe-5ed5-be17-0cdbeb8161d0",
+              "name": "dossier",
+              "value": "={{ $('ResearchAgent').isExecuted ? $('ResearchAgent').first().json.output : '' }}",
+              "type": "string"
+            },
+            {
+              "id": "036ccb18-e98e-5430-bcff-d4c890054c4f",
+              "name": "round",
+              "value": "={{ $('Normalize Request').first().json.round }}",
+              "type": "number"
+            },
+            {
+              "id": "513ab9cf-7653-5d8a-8ac5-5b30eacd92b4",
+              "name": "issues",
+              "value": "={{ $('Normalize Request').first().json.issues }}",
+              "type": "array"
+            },
+            {
+              "id": "5a3068f3-d15a-5fb8-ae6e-2cf45cfa4202",
+              "name": "previous_draft",
+              "value": "={{ {} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "65744869-c522-57a7-af93-f15e9c716930",
+      "name": "Build Draft Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.round > 0 ? 'Incoming message on wire `ReviewAgent_to_DraftAgent` (revision_round ' + $json.round + ').' : 'Incoming message on wire `IntakeAgent_to_DraftAgent`.' }}\n\nBrief:\n{{ JSON.stringify($json.brief, null, 2) }}\n\nResearch dossier:\n{{ $json.dossier || '(none: no research was run for this request; state limitations and flag unsupported claims)' }}{{ $json.round > 0 ? '\\n\\nPrevious draft (revise this):\\n' + $json.previous_draft.content + '\\n\\nIssues to resolve:\\n' + $json.issues.map(i => '- [' + i.severity + '] ' + i.description + ' | suggested fix: ' + i.suggested_fix).join('\\n') : '' }}\n\n{{ $json.round > 0 ? 'Revise the draft to resolve every issue.' : 'Write the full deliverable per the brief.' }} Return title, content (the complete deliverable in markdown, meeting the brief's length) and word_count. No placeholder text such as [Insert ...], TODO or TBD.\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are DraftAgent, the agency's lead writer. Your job is to create written deliverables from structured briefs, optionally grounded by research dossiers.\n\nGOAL: Produce high-quality drafts that address every requirement in the brief, using research when available and flagging unsupported claims honestly.\n\nWORKFLOW:\n1. Use parse_brief to extract all requirements (audience, tone, length, key points, format)\n2. Use outline_content to create a structured outline before drafting\n3. Use draft_deliverable to write the full draft from outline + research\n4. Use format_output to deliver in the requested format\n\nOUTPUT FORMAT — always return a draft with:\n- title: document title\n- content: full draft text in requested format\n- format: output format used\n- unsupported: array of claims made without research backing\n- word_count: total word count\n\nHARD RULES:\n- Address every requirement in the brief\n- Flag all unsupported claims explicitly\n- Follow the requested tone and audience\n- Never hallucinate facts — state limitations when research is absent\n- Never exceed requested length by more than 20% — check word_count against the brief's length before returning\n- Never skip the outline step\n\nESCALATE TO HUMAN WHEN:\n- Brief is ambiguous or contradictory\n- Content needs domain expertise beyond available research\n- 3 revision cycles exhausted without passing review"
+            }
+          ]
+        }
+      },
+      "id": "8129a3a1-1acd-5244-82ca-4f397be49fd0",
+      "name": "DraftAgent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        1760,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "maxTokensToSample": 4500,
+          "temperature": 0.3
+        }
+      },
+      "id": "c7898710-2249-5a74-a9ec-27fb40afb9bd",
+      "name": "Groq Draft",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1720,
+        520
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"draft\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"title\": {\n          \"type\": \"string\"\n        },\n        \"content\": {\n          \"type\": \"string\",\n          \"description\": \"The complete deliverable in markdown\"\n        },\n        \"word_count\": {\n          \"type\": \"number\"\n        }\n      },\n      \"required\": [\n        \"title\",\n        \"content\",\n        \"word_count\"\n      ]\n    }\n  },\n  \"required\": [\n    \"draft\"\n  ]\n}"
+      },
+      "id": "ba499475-ac8a-5b5a-8550-13d244c1052d",
+      "name": "Draft Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1880,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "54646095-7755-5ad7-9060-21b4246ba71f",
+              "name": "raw_request",
+              "value": "={{ $('Build Draft Input').first().json.raw_request }}",
+              "type": "string"
+            },
+            {
+              "id": "0ccbad69-14aa-523a-8309-bcf539b77189",
+              "name": "run_id",
+              "value": "={{ $('Build Draft Input').first().json.run_id }}",
+              "type": "string"
+            },
+            {
+              "id": "00b0581f-fa13-57a1-885c-a109ef139f88",
+              "name": "brief",
+              "value": "={{ $('Build Draft Input').first().json.brief }}",
+              "type": "object"
+            },
+            {
+              "id": "0b1829c3-8f3b-5ae4-818d-ce42e5e10ce8",
+              "name": "dossier",
+              "value": "={{ $('Build Draft Input').first().json.dossier }}",
+              "type": "string"
+            },
+            {
+              "id": "49b677e3-f140-5069-9c5e-ce6524617d5b",
+              "name": "round",
+              "value": "={{ $('Prepare Revision').isExecuted ? $('Prepare Revision').last().json.round : 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "7fdbcb77-1318-5138-8976-e6919d0a2494",
+              "name": "draft",
+              "value": "={{ $json.output.draft }}",
+              "type": "object"
+            },
+            {
+              "id": "463fbd8b-8aa0-5d70-a443-2cae251d7df4",
+              "name": "word_count",
+              "value": "={{ (($json.output.draft.content || '').trim().split(/\\s+/).filter(w => w.length > 0).length) }}",
+              "type": "number"
+            },
+            {
+              "id": "8bcc2c0a-d2b0-567f-a9b3-13c3d53cef49",
+              "name": "has_placeholder",
+              "value": "={{ /\\[(?:insert|add|todo|tbd|placeholder|your |company name|name|date)[^\\]]*\\]|\\bTODO\\b|\\bTBD\\b|lorem ipsum/i.test($json.output.draft.content || '') }}",
+              "type": "boolean"
+            },
+            {
+              "id": "19ae9b54-5fb9-57ed-b389-5feb70cbe34b",
+              "name": "length_ok",
+              "value": "={{ (() => {\n  const len = String($('Build Draft Input').first().json.brief.length || '');\n  const nums = /word/i.test(len) ? (len.replace(/,/g, '').match(/\\d+/g) || []).map(Number) : [];\n  if (nums.length === 0) return true;\n  const wc = (($json.output.draft.content || '').trim().split(/\\s+/).filter(w => w.length > 0).length);\n  return wc >= Math.min.apply(null, nums) * 0.85 && wc <= Math.max.apply(null, nums) * 1.15;\n})() }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "2591b247-16da-5442-a4fb-6e3abad2560f",
+      "name": "Deterministic Checks",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2060,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Incoming message on wire `DraftAgent_to_ReviewAgent` (revision_round {{ $json.round }}).\n\nBrief:\n{{ JSON.stringify($json.brief, null, 2) }}\n\nDraft title: {{ $json.draft.title }}\nDraft (markdown):\n{{ $json.draft.content }}\n\nDeterministic checks computed by the workflow (treat as facts):\n- measured word_count: {{ $json.word_count }} (draft self-reported {{ $json.draft.word_count }})\n- length within 15% of the brief's word target: {{ $json.length_ok }}\n- placeholder text detected: {{ $json.has_placeholder }}\n\nEvaluate the draft against the brief. Return dimension_scores (clarity, accuracy, completeness, tone_alignment, each 0-100), score (composite 0-100, consistent with the dimensions), requirements (array of requirement + passed boolean), issues (array of severity critical/high/medium/low, description, suggested_fix; empty if nothing to flag) and status (derive it mechanically: \"approved\" when score >= 80 and no issue is critical, else \"revision_required\"; non-critical issues do not block approval).\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are ReviewAgent, the agency's quality director. Your job is to evaluate deliverables against brief requirements and quality standards before they reach the client.\n\nGOAL: Ensure every deliverable meets all stated requirements, is factually grounded, and passes quality thresholds. Never let substandard work through.\n\nWORKFLOW:\n1. Use check_requirements to verify the draft against every brief requirement (pass/fail each)\n2. Use assess_quality to score on clarity, accuracy, completeness, and tone alignment\n3. Use flag_issues to identify and categorize problems with severity and suggested fixes\n\nOUTPUT FORMAT — always return a review with:\n- status: \"approved\" or \"revision_required\"\n- score: composite quality score 0-100\n- dimension_scores: per-dimension scores 0-100 for clarity, accuracy, completeness, tone_alignment — the composite score must be consistent with these\n- requirements_check: per-requirement pass/fail results\n- issues: categorized problems with severity and suggested fixes\n- approved: boolean — whether deliverable passes the quality gate\n\nDECISION RULE — status and approved MUST follow directly from the gate:\n- approved = true and status = \"approved\" if and only if score >= 80 AND there are no critical-severity issues\n- Otherwise approved = false and status = \"revision_required\"\n- Non-critical issues (high/medium/low) do NOT block approval on their own; list them as issues but keep status consistent with the rule above\n\nHARD RULES:\n- If score >= 80 and no issue has critical severity, you MUST set status \"approved\" and approved true — even if non-critical issues remain. Listing minor issues while approving is correct behavior, not a contradiction.\n- Check every requirement, not just a sample\n- Assign severity to every issue (critical, high, medium, low)\n- Include a suggested fix for every issue\n- Never approve a deliverable with critical issues\n- Never approve a deliverable with a quality score below 80\n- Never allow more than 3 revision cycles — if revision_round >= 3, escalate to human instead of sending back to DraftAgent\n- Never skip requirements check even if quality score is high\n\nESCALATE TO HUMAN WHEN:\n- revision_round >= 3 — do not send back to DraftAgent, escalate immediately\n- Quality is borderline (65-75) after all requirements pass\n\nESCALATE TO ResearchAgent WHEN:\n- Factual accuracy cannot be verified from available information"
+            }
+          ]
+        }
+      },
+      "id": "09d998a3-292a-564b-9d26-3658f465fc3d",
+      "name": "ReviewAgent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        2280,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "maxTokensToSample": 4500,
+          "temperature": 0.3
+        }
+      },
+      "id": "6d318565-5040-5e58-bd0d-55f2a7a8ecbe",
+      "name": "Groq Review",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        520
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"dimension_scores\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"clarity\": {\n          \"type\": \"number\"\n        },\n        \"accuracy\": {\n          \"type\": \"number\"\n        },\n        \"completeness\": {\n          \"type\": \"number\"\n        },\n        \"tone_alignment\": {\n          \"type\": \"number\"\n        }\n      },\n      \"required\": [\n        \"clarity\",\n        \"accuracy\",\n        \"completeness\",\n        \"tone_alignment\"\n      ]\n    },\n    \"score\": {\n      \"type\": \"number\",\n      \"description\": \"Composite 0-100, consistent with dimension_scores\"\n    },\n    \"requirements\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"requirement\": {\n            \"type\": \"string\"\n          },\n          \"passed\": {\n            \"type\": \"boolean\"\n          }\n        },\n        \"required\": [\n          \"requirement\",\n          \"passed\"\n        ]\n      }\n    },\n    \"issues\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"severity\": {\n            \"type\": \"string\",\n            \"description\": \"critical | high | medium | low\"\n          },\n          \"description\": {\n            \"type\": \"string\"\n          },\n          \"suggested_fix\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"severity\",\n          \"description\",\n          \"suggested_fix\"\n        ]\n      }\n    },\n    \"status\": {\n      \"type\": \"string\",\n      \"description\": \"approved | revision_required\"\n    }\n  },\n  \"required\": [\n    \"dimension_scores\",\n    \"score\",\n    \"requirements\",\n    \"issues\",\n    \"status\"\n  ]\n}"
+      },
+      "id": "6cc24b00-1f57-5ecd-b7ca-b69edd3e6c6e",
+      "name": "Review Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        2400,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c63a039c-4e07-5c20-ad26-d3188b01d2dd",
+              "name": "raw_request",
+              "value": "={{ $('Deterministic Checks').item.json.raw_request }}",
+              "type": "string"
+            },
+            {
+              "id": "652e6416-ea9c-5edb-b9c7-ad0b8675911a",
+              "name": "run_id",
+              "value": "={{ $('Deterministic Checks').item.json.run_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f31f1c46-465c-59cb-b3d8-e9bbb69baad7",
+              "name": "brief",
+              "value": "={{ $('Deterministic Checks').item.json.brief }}",
+              "type": "object"
+            },
+            {
+              "id": "4cb29977-75d2-52ca-986a-c915d214976a",
+              "name": "dossier",
+              "value": "={{ $('Deterministic Checks').item.json.dossier }}",
+              "type": "string"
+            },
+            {
+              "id": "03d93724-926b-5f6b-89d6-db93a23e5a89",
+              "name": "round",
+              "value": "={{ $('Deterministic Checks').item.json.round }}",
+              "type": "number"
+            },
+            {
+              "id": "ac6a6da3-4db7-58b5-894e-f4e1d36d7d40",
+              "name": "draft",
+              "value": "={{ $('Deterministic Checks').item.json.draft }}",
+              "type": "object"
+            },
+            {
+              "id": "8dbe5e9b-a19c-57a3-9937-daf7e0b25e4b",
+              "name": "word_count",
+              "value": "={{ $('Deterministic Checks').item.json.word_count }}",
+              "type": "number"
+            },
+            {
+              "id": "eef352dc-c90f-5f38-b415-36bcdb3f13ee",
+              "name": "has_placeholder",
+              "value": "={{ $('Deterministic Checks').item.json.has_placeholder }}",
+              "type": "boolean"
+            },
+            {
+              "id": "0d2ccb64-485d-5e50-8f5d-a9b5a657775d",
+              "name": "length_ok",
+              "value": "={{ $('Deterministic Checks').item.json.length_ok }}",
+              "type": "boolean"
+            },
+            {
+              "id": "bc12d188-5208-5b39-8d55-d7ef20df36f0",
+              "name": "review",
+              "value": "={{ $json.output }}",
+              "type": "object"
+            },
+            {
+              "id": "bf4faf0f-81b6-5a55-b1dd-8e40985ac21b",
+              "name": "score",
+              "value": "={{ Number($json.output.score) }}",
+              "type": "number"
+            },
+            {
+              "id": "33e2014f-8ca4-5db9-95bd-11177e09195b",
+              "name": "critical_count",
+              "value": "={{ (($json.output.issues || []).filter(i => String(i.severity).toLowerCase() === 'critical').length) }}",
+              "type": "number"
+            },
+            {
+              "id": "be8f3edb-0c24-560c-8c21-636bc91ea6c1",
+              "name": "issues",
+              "value": "={{ ($json.output.issues || []).concat(\n  $('Deterministic Checks').item.json.has_placeholder ? [ { severity: 'critical', description: 'Placeholder text detected in the draft (e.g. [Insert ...], TODO, TBD, lorem ipsum).', suggested_fix: 'Replace every placeholder with real content or remove it.' } ] : [],\n  $('Deterministic Checks').item.json.length_ok ? [] : [ { severity: 'high', description: 'Measured word count ' + $('Deterministic Checks').item.json.word_count + ' is outside 15% of the brief length (' + $('Deterministic Checks').item.json.brief.length + ').', suggested_fix: 'Expand or trim the draft to the requested length.' } ]\n) }}",
+              "type": "array"
+            },
+            {
+              "id": "a2b247ed-ad3d-5954-b4af-c6993af6de35",
+              "name": "approved",
+              "value": "={{ Number($json.output.score) >= 80 && !$('Deterministic Checks').item.json.has_placeholder && (($json.output.issues || []).filter(i => String(i.severity).toLowerCase() === 'critical').length) === 0 }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "8da9806e-9a95-511b-b720-f7ee9f3bbf31",
+      "name": "Compute Verdict",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2580,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5c33c80f-4add-517f-bea0-0be09c6c2f5f",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "cb14e5ed-5b7e-55ba-8065-d032e3daffd9",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Incoming message on wire `ReviewAgent_to_DispatchAgent`.\n\nDraft title: {{ $json.draft.title }}\nReview summary: score {{ $json.score }}, review_status approved, revision rounds used {{ $json.round }}.\nResearch dossier attached: {{ $json.dossier ? 'yes' : 'no' }}\n\nPackage this approved deliverable. Return title, delivery_note (short client-facing note) and status. Do not alter the approved content.\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are DispatchAgent, the agency's delivery manager. Your job is to package approved deliverables for client delivery, attach supporting context, and confirm successful handoff.\n\nGOAL: Ensure every approved deliverable reaches the client in the correct format, with sources, revision notes, and metadata, and that delivery is tracked to completion.\n\nWORKFLOW:\n1. Use package_deliverable to format the approved content per client preferences\n2. Use attach_context to append research sources, revision history, and agency metadata\n3. Use confirm_delivery to record the delivery event and track client confirmation\n\nOUTPUT FORMAT — always return a package with:\n- content: final formatted content\n- format: format applied\n- sources: all research sources consulted\n- revision_history: changes across review cycles\n- metadata: agency name, pipeline used, delivery timestamp\n\nHARD RULES:\n- Include all research sources in every package\n- Include revision history in every package\n- Respect client formatting preferences\n- Never deliver without an approved review status\n- Never route revision requests to DraftAgent — always route to IntakeAgent\n- Never alter approved content during packaging (formatting only)\n\nESCALATE TO HUMAN WHEN:\n- Delivery fails or client is unreachable\n- Format cannot be applied correctly\n\nROUTE WHEN:\n- Client requests revision after delivery → use send_to_IntakeAgent (never route directly to DraftAgent)"
+            }
+          ]
+        }
+      },
+      "id": "66a44ad0-b196-5fa3-a334-ca36f477acb4",
+      "name": "DispatchAgent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        3020,
+        60
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {
+          "maxTokensToSample": 2000,
+          "temperature": 0.3
+        }
+      },
+      "id": "db909c19-d2de-5157-b509-4421e0204bde",
+      "name": "Groq Dispatch",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2980,
+        280
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Groq"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"package\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"title\": {\n          \"type\": \"string\"\n        },\n        \"delivery_note\": {\n          \"type\": \"string\",\n          \"description\": \"Short client-facing note\"\n        },\n        \"status\": {\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"title\",\n        \"delivery_note\",\n        \"status\"\n      ]\n    }\n  },\n  \"required\": [\n    \"package\"\n  ]\n}"
+      },
+      "id": "58eb3f35-d4a4-5a8d-93b8-bcecbeb5d944",
+      "name": "Dispatch Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        3140,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'delivered', run_id: $('Compute Verdict').item.json.run_id, score: $('Compute Verdict').item.json.score, rounds: $('Compute Verdict').item.json.round, title: $json.output.package.title || $('Compute Verdict').item.json.draft.title, deliverable: $('Compute Verdict').item.json.draft.content, delivery_note: $json.output.package.delivery_note, package_status: $json.output.package.status, issues: $('Compute Verdict').item.json.issues }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "4363ca35-7162-5938-af57-6c813d0c60c2",
+      "name": "Respond Delivered",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3340,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0c5d3377-e6fd-58a9-89a0-8354be60e679",
+              "leftValue": "={{ $json.round }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "808f355c-edf9-5360-b601-3af28a17cabc",
+      "name": "Rounds Left?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3020,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9d48efd9-a275-5a36-b212-e2eec105f8ff",
+              "name": "raw_request",
+              "value": "={{ $json.raw_request }}",
+              "type": "string"
+            },
+            {
+              "id": "294ec881-ea99-5ce8-a4fa-a9d82a6d00cc",
+              "name": "run_id",
+              "value": "={{ $json.run_id }}",
+              "type": "string"
+            },
+            {
+              "id": "0e8c8cc9-4312-5851-8fce-c70a62e1d2e8",
+              "name": "brief",
+              "value": "={{ $json.brief }}",
+              "type": "object"
+            },
+            {
+              "id": "7f37e06e-10d5-54dc-a0b8-a681cb46d979",
+              "name": "work_type",
+              "value": "={{ $('Build Draft Input').first().json.work_type }}",
+              "type": "string"
+            },
+            {
+              "id": "60771caa-a684-53df-ac01-a15bea61820d",
+              "name": "dossier",
+              "value": "={{ $json.dossier }}",
+              "type": "string"
+            },
+            {
+              "id": "21cfb121-b148-58a0-9651-55ba789beeb2",
+              "name": "round",
+              "value": "={{ $json.round + 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "98f0bc62-4cd3-5647-8d3d-ff9082834725",
+              "name": "issues",
+              "value": "={{ $json.issues }}",
+              "type": "array"
+            },
+            {
+              "id": "940e8fef-7e21-5b66-b48c-9d115caa7e53",
+              "name": "previous_draft",
+              "value": "={{ $json.draft }}",
+              "type": "object"
+            },
+            {
+              "id": "b2b2b2ea-055f-5da0-93d0-ac2b6b6efa7d",
+              "name": "last_score",
+              "value": "={{ $json.score }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "f7e7c1ec-bf4d-5e9d-a057-e2329abcdce2",
+      "name": "Prepare Revision",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3240,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'escalated', run_id: $json.run_id, reason: 'Revision cap reached: ' + $json.round + ' revision cycles exhausted and the draft still fails the quality gate (score ' + $json.score + '; needs >= 80, no critical issue and no placeholder text). Needs human review.', last_score: $json.score, rounds: $json.round, issues: $json.issues, last_draft: $json.draft }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "0c7a1ca9-0e38-5fe6-b194-e791c0548765",
+      "name": "Respond Escalated",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3240,
+        720
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Test Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "IntakeAgent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IntakeAgent": {
+      "main": [
+        [
+          {
+            "node": "Needs Research?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Research?": {
+      "main": [
+        [
+          {
+            "node": "ResearchAgent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Draft Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ResearchAgent": {
+      "main": [
+        [
+          {
+            "node": "Build Draft Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Draft Input": {
+      "main": [
+        [
+          {
+            "node": "DraftAgent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DraftAgent": {
+      "main": [
+        [
+          {
+            "node": "Deterministic Checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deterministic Checks": {
+      "main": [
+        [
+          {
+            "node": "ReviewAgent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReviewAgent": {
+      "main": [
+        [
+          {
+            "node": "Compute Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Verdict": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "DispatchAgent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rounds Left?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DispatchAgent": {
+      "main": [
+        [
+          {
+            "node": "Respond Delivered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rounds Left?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Revision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Escalated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Revision": {
+      "main": [
+        [
+          {
+            "node": "DraftAgent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Intake": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "IntakeAgent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intake Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "IntakeAgent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Research": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ResearchAgent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wikipedia": {
+      "ai_tool": [
+        [
+          {
+            "node": "ResearchAgent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Search": {
+      "ai_tool": [
+        [
+          {
+            "node": "ResearchAgent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Draft": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "DraftAgent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "DraftAgent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Review": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ReviewAgent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "ReviewAgent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Dispatch": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "DispatchAgent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "DispatchAgent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}
