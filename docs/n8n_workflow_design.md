@@ -163,8 +163,18 @@ them to ReviewAgent as facts:
 
 - `word_count`: the draft content trimmed, split on whitespace, and empty strings dropped.
   The model's self-reported `word_count` is shown alongside it but never trusted.
-- `has_placeholder`: true when a regex finds bracketed placeholders (`[Insert ...]`,
-  `[TODO]`, `[Your ...]`, `[Name]`, `[Date]`, ...), bare `TODO` / `TBD`, or `lorem ipsum`.
+- `has_placeholder`: true when the regex below finds placeholder text:
+
+  ```
+  /\[(?:insert|add)\b[^\]]*\](?!\()|\[(?:name|date|company name|todo|tbd|placeholder|your [^\]]+)\](?!\()|\bTODO\b|\bTBD\b|\bX{3,}\b|lorem ipsum/i
+  ```
+
+  It matches `[insert ...]` / `[add ...]` (whole words only), the exact bracketed
+  placeholders `[Name]`, `[Date]`, `[Company Name]`, `[TODO]`, `[TBD]`, `[Placeholder]` and
+  `[Your ...]`, plus bare `TODO`, `TBD`, `XXX` and `lorem ipsum`. The `(?!\()` lookahead skips
+  markdown link text, and the `\b` / exact-word anchors skip ordinary words. So
+  `[Additional resources](url)`, `[Your HR portal](url)`, `[Dates and deadlines](#d)` and
+  `[Addendum]` do not match.
 - `length_ok`: when `brief.length` mentions "word", its numbers are parsed (`"300-400
   words"` gives 300 and 400) and the word count must fall within `[min * 0.85, max * 1.15]`.
   When there is no word target (e.g. "1 page", "short"), `length_ok` is true.
@@ -195,9 +205,15 @@ them to ReviewAgent as facts:
 - **Model/tool support:** ResearchAgent needs a model that supports tool calling
   (`openai/gpt-oss-120b` on Groq does). The Structured Output Parser relies on the model
   following the format instructions n8n adds to the prompt.
-- **Curly braces:** LangChain prompt templates treat `{...}` as variables. The system
-  prompts contain no braces. Dynamic values (brief JSON, draft text) go into the user
-  prompt, which n8n passes as a variable rather than as template text.
+- **Curly braces:** LangChain prompt templates treat `{...}` as variables. The Intake,
+  Draft, Review and Dispatch system prompts (Basic LLM Chain system-message templates)
+  contain no braces. `agents/ResearchAgent/system_prompt.txt` does contain one
+  (`{claim, sources, confidence (0-100), notes}`, line 12). That is safe as long as it stays
+  in the AI Agent's Options -> System Message, which the Tools Agent passes as a variable.
+  If you move that prompt into a Basic LLM Chain system message, it breaks: escape the braces
+  as `{{`/`}}` or reword them. Keep any prompt pasted into a chain's system message free of
+  braces. Dynamic values (brief JSON, draft text) go into the user prompt, which n8n passes
+  as a variable rather than as template text.
 - **Prompt drift:** system prompts are copies (see Prompts above). Editing
   `agents/*/system_prompt.txt` does not update the workflow automatically.
 - **Tavily tool:** `toolHttpRequest` (HTTP Request Tool) is a legacy node in recent n8n
