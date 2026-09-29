@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node.\n2. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disconnect Tavily Search; ResearchAgent still has Wikipedia.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
+        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node.\n2. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disconnect Tavily Search; ResearchAgent still has Wikipedia.\n3. **Before activating:** set **Authentication** on the *Webhook* node (Header Auth, Basic Auth or JWT). It is *None* by default, so anyone with the URL could run the pipeline on your Groq/Tavily quota.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
         "height": 380,
         "width": 520,
         "color": 5
