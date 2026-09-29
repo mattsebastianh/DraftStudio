@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2280" height="800" viewBox="0 0 2280 800" font-family="Inter, Helvetica, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker>
+<marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#dc2626"/></marker></defs>
+<rect width="2280" height="800" fill="#f8fafc"/>
+<text x="40" y="50" font-size="24" font-weight="700" fill="#0f172a">DraftStudio — n8n Workflow Architecture</text>
+<text x="40" y="74" font-size="13" fill="#64748b">Built-in n8n nodes only · solid = data flow · dashed = tool / optional · red = revision loop and escalation · approve at score ≥ 80, no critical issue, no placeholder · max 3 revision cycles</text>
+<g fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)">
+<path d="M160 380 H212"/>
+<path d="M332 380 H384"/>
+<path d="M544 380 H596"/>
+<path d="M716 380 H768"/>
+<path d="M888 380 H940"/>
+<path d="M1100 380 H1152"/>
+<path d="M1282 380 H1334"/>
+<path d="M1494 380 H1546"/>
+<path d="M1666 380 H1718"/>
+<path d="M1828 380 H1880"/>
+<path d="M2040 380 H2092"/>
+<path d="M820 260 V355"/>
+<path d="M656 355 V225 H690" stroke-dasharray="6 4"/>
+<path d="M700 141 V190" stroke-dasharray="6 4"/>
+<path d="M840 141 V190" stroke-dasharray="6 4"/>
+</g>
+<g fill="none" stroke="#dc2626" stroke-width="2" marker-end="url(#r)">
+<path d="M1773 405 V500"/>
+<path d="M1713 525 H1440"/>
+<path d="M1300 525 H1020 V420"/>
+<path d="M1773 550 V640"/>
+</g>
+<text x="186" y="372" font-size="10" fill="#475569" text-anchor="middle">body</text>
+<text x="358" y="372" font-size="10" fill="#475569" text-anchor="middle">request</text>
+<text x="570" y="372" font-size="10" fill="#475569" text-anchor="middle">brief</text>
+<text x="742" y="372" font-size="10" fill="#475569" text-anchor="middle">no</text>
+<text x="914" y="372" font-size="10" fill="#475569" text-anchor="middle">input</text>
+<text x="1126" y="372" font-size="10" fill="#475569" text-anchor="middle">draft</text>
+<text x="1308" y="372" font-size="10" fill="#475569" text-anchor="middle">+ checks</text>
+<text x="1520" y="372" font-size="10" fill="#475569" text-anchor="middle">review</text>
+<text x="1692" y="372" font-size="10" fill="#475569" text-anchor="middle">verdict</text>
+<text x="1854" y="372" font-size="10" fill="#475569" text-anchor="middle">yes</text>
+<text x="2066" y="372" font-size="10" fill="#475569" text-anchor="middle">package</text>
+<text x="664" y="300" font-size="12" fill="#475569">research</text>
+<text x="836" y="312" font-size="12" fill="#475569">dossier</text>
+<text x="722" y="123" font-size="12" fill="#475569" text-anchor="middle">tools</text>
+<text x="1782" y="460" font-size="12" fill="#dc2626">not approved</text>
+<text x="1576" y="517" font-size="12" fill="#dc2626" text-anchor="middle">yes: next cycle</text>
+<text x="1160" y="517" font-size="12" fill="#dc2626" text-anchor="middle">revision + issues</text>
+<text x="1782" y="605" font-size="12" fill="#dc2626">round 3 fails</text>
+<rect x="40" y="355" width="120" height="50" rx="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><text x="100.0" y="378.0" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Triggers</text><text x="100.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Webhook | Manual</text>
+<rect x="212" y="355" width="120" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/><text x="272.0" y="378.0" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Normalize Request</text><text x="272.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields</text>
+<rect x="384" y="340" width="160" height="80" rx="12" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/><text x="464.0" y="378.0" font-size="14" font-weight="600" fill="#1e3a8a" text-anchor="middle">IntakeAgent</text><text x="464.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<rect x="596" y="355" width="120" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/><text x="656.0" y="378.0" font-size="12" font-weight="600" fill="#134e4a" text-anchor="middle">Needs Research?</text><text x="656.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">IF</text>
+<rect x="768" y="355" width="120" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/><text x="828.0" y="378.0" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Build Draft Input</text><text x="828.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields</text>
+<rect x="940" y="340" width="160" height="80" rx="12" fill="#fef9c3" stroke="#eab308" stroke-width="2"/><text x="1020.0" y="378.0" font-size="14" font-weight="600" fill="#713f12" text-anchor="middle">DraftAgent</text><text x="1020.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<rect x="1152" y="355" width="130" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/><text x="1217.0" y="378.0" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Deterministic Checks</text><text x="1217.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields</text>
+<rect x="1334" y="340" width="160" height="80" rx="12" fill="#fae8ff" stroke="#c026d3" stroke-width="2"/><text x="1414.0" y="378.0" font-size="14" font-weight="600" fill="#701a75" text-anchor="middle">ReviewAgent</text><text x="1414.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<rect x="1546" y="355" width="120" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/><text x="1606.0" y="378.0" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">Compute Verdict</text><text x="1606.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields</text>
+<rect x="1718" y="355" width="110" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/><text x="1773.0" y="378.0" font-size="12" font-weight="600" fill="#134e4a" text-anchor="middle">Approved?</text><text x="1773.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">IF</text>
+<rect x="1880" y="340" width="160" height="80" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="2"/><text x="1960.0" y="378.0" font-size="14" font-weight="600" fill="#7c2d12" text-anchor="middle">DispatchAgent</text><text x="1960.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<rect x="2092" y="355" width="140" height="50" rx="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><text x="2162.0" y="378.0" font-size="14" font-weight="600" fill="#0f172a" text-anchor="middle">Respond Delivered</text><text x="2162.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Respond to Webhook</text>
+<rect x="690" y="190" width="160" height="70" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/><text x="770.0" y="223.0" font-size="14" font-weight="600" fill="#14532d" text-anchor="middle">ResearchAgent</text><text x="770.0" y="240.0" font-size="11" fill="#64748b" text-anchor="middle">AI Agent</text>
+<rect x="650" y="105" width="100" height="36" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/><text x="700.0" y="121.0" font-size="12" font-weight="600" fill="#14532d" text-anchor="middle">Wikipedia</text><text x="700.0" y="138.0" font-size="11" fill="#64748b" text-anchor="middle">tool</text>
+<rect x="790" y="105" width="100" height="36" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/><text x="840.0" y="121.0" font-size="12" font-weight="600" fill="#14532d" text-anchor="middle">Tavily Search</text><text x="840.0" y="138.0" font-size="11" fill="#64748b" text-anchor="middle">tool</text>
+<rect x="1713" y="500" width="120" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/><text x="1773.0" y="523.0" font-size="12" font-weight="600" fill="#134e4a" text-anchor="middle">Rounds Left?</text><text x="1773.0" y="540.0" font-size="11" fill="#64748b" text-anchor="middle">IF  round &lt; 3</text>
+<rect x="1300" y="500" width="140" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/><text x="1370.0" y="523.0" font-size="14" font-weight="600" fill="#0f172a" text-anchor="middle">Prepare Revision</text><text x="1370.0" y="540.0" font-size="11" fill="#64748b" text-anchor="middle">round + 1</text>
+<rect x="1693" y="640" width="160" height="60" rx="12" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/><text x="1773.0" y="668.0" font-size="14" font-weight="600" fill="#7f1d1d" text-anchor="middle">Respond Escalated</text><text x="1773.0" y="685.0" font-size="11" fill="#64748b" text-anchor="middle">needs a human</text>
+<rect x="40" y="590" width="1180" height="150" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="6 4" stroke-width="2"/>
+<text x="60" y="620" font-size="14" font-weight="600" fill="#0f172a">Every AI node (IntakeAgent, ResearchAgent, DraftAgent, ReviewAgent, DispatchAgent)</text>
+<text x="60" y="646" font-size="12" fill="#475569">Groq Chat Model openai/gpt-oss-120b (primary) · fallback qwen/qwen3.8-27b via needsFallback (ai_languageModel index 1)</text>
+<text x="60" y="666" font-size="12" fill="#475569">Structured Output Parser on Intake, Draft, Review, Dispatch · ResearchAgent adds Wikipedia + Tavily Search tools (max 6 tool calls)</text>
+<text x="60" y="686" font-size="12" fill="#475569">Checks and verdict use Edit Fields + IF expressions only (no Code node) · Draft loops back through Prepare Revision</text>
+<text x="60" y="716" font-size="12" fill="#dc2626">Before activating: set authentication on the Webhook node. Validated against n8n 2.41.2 sources; not yet run in a live n8n.</text>
+</svg>

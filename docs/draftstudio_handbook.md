@@ -56,6 +56,10 @@ Two operational rules, learned the hard way:
                                                                   └── revision ──┘  (max 3 cycles, then human escalation)
 ```
 
+Full diagram of this pipeline: [01_pipeline_architecture_groq_harness.svg](01_pipeline_architecture_groq_harness.svg). The same pipeline as an importable n8n workflow is drawn in [02_pipeline_architecture_n8n.svg](02_pipeline_architecture_n8n.svg) and documented in [n8n_workflow_design.md](n8n_workflow_design.md).
+
+Diagram files in `docs/` are named `NN_<subject>_<diagram-type>_<variant>.svg`: `NN` is the reading order, and the variant says which implementation is drawn (not which came later).
+
 The single command-line argument is the entire client request. Put **everything** in it — constraints, tone, audience, format, hard limits — because IntakeAgent parses that one string into the structured brief every downstream agent works from. ResearchAgent only runs if IntakeAgent sets `needs_research: true`.
 
 ## 3. Worked Example — Vacation Policy Memo

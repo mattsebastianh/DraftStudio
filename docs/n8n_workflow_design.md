@@ -8,6 +8,11 @@ quality threshold 80, at most 3 revision cycles, then escalation.
 
 Check it with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
 
+## Diagrams
+
+- [02_pipeline_architecture_n8n.svg](02_pipeline_architecture_n8n.svg): this workflow (n8n nodes, revision loop, escalation).
+- [01_pipeline_architecture_groq_harness.svg](01_pipeline_architecture_groq_harness.svg): the same pipeline as the Python harness on Groq, for comparison.
+
 This workflow has been validated structurally and against the published n8n package source, but has not been executed in a live n8n instance.
 
 Verified against: `n8n-nodes-base@2.41.2`, `@n8n/n8n-nodes-langchain@2.41.2` and `n8n-core@2.41.2`
