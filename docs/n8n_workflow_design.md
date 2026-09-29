@@ -8,6 +8,8 @@ quality threshold 80, at most 3 revision cycles, then escalation.
 
 Check it with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
 
+This workflow has been validated structurally and against the published n8n package source, but has not been executed in a live n8n instance.
+
 Verified against: `n8n-nodes-base@2.41.2`, `@n8n/n8n-nodes-langchain@2.41.2` and `n8n-core@2.41.2`
 (the versions pinned by `n8n@2.41.3`, the current npm `latest`/`stable`), 2026-09-29. Every node type,
 typeVersion and top-level parameter name was checked against the published node descriptions; see
@@ -21,7 +23,16 @@ typeVersion and top-level parameter name was checked against the published node 
    warning. The file only refers to credentials by name, with id `REPLACE_ME`.
 3. Test it: click **Test workflow** (this runs Manual Trigger -> Test Input, a sample
    vacation-policy memo request), or call the webhook test URL.
-4. Go live: activate the workflow. The production URL is `POST <n8n-base>/webhook/draftstudio`.
+4. **Security: set authentication before activating.** The Webhook node ships with
+   Authentication = *None*. Once the workflow is active, anyone who knows the URL can start a
+   run, and each run makes 5-13 LLM calls plus Tavily searches on your Groq and Tavily quota.
+   Before step 5, open the **Webhook** node and set **Authentication** to *Header Auth*,
+   *Basic Auth* or *JWT Auth* with a credential of its own. Consider changing the path from
+   `draftstudio` to something hard to guess, and change it (and the credential) if it leaks.
+   The request text goes straight into the prompts, so prompt injection is possible. The
+   only tools any agent can call are Wikipedia and Tavily search, both read-only.
+5. Go live: activate the workflow. The production URL is `POST <n8n-base>/webhook/draftstudio`
+   (or the path you chose), called with the authentication you set in step 4.
 
 ## Credentials to create
 
@@ -42,7 +53,7 @@ credential store.
   second model input (*Fallback Model*, `ai_languageModel` index 1). If a call to the primary
   model throws (for example a 429 when the daily token quota is exhausted), LangChain's
   `withFallbacks` re-runs the same prompt on the fallback model. This needs Basic LLM Chain
-  >= 1.2 (1.5 is used) and AI Agent >= 2.1 (ResearchAgent uses 2.2).
+  1.2, or 1.4 and later (1.5 is used; 1.3 hides the option) and AI Agent >= 2.1 (ResearchAgent uses 2.2).
 - Max output tokens (`maxTokensToSample`, sent to Groq as `max_tokens`) are sized for
   reasoning models, which spend part of the budget on hidden reasoning: Intake 4000,
   Research 12000, Draft 12000, Review 10000, Dispatch 3000. Primary and fallback nodes use
@@ -132,7 +143,9 @@ Manual Trigger ──► Test Input ┴► Normalize Request
   plain strings rather than enums, so a capitalised value doesn't fail parsing. The verdict
   compares severities without regard to case.
 - **Fallback models:** every chain/agent also has a `Groq Fallback <Agent>` model node (see
-  Models). The flow diagram leaves them out.
+  Models). The flow diagram shows Groq Fallback Intake as an example. The other four
+  (Research, Draft, Review, Dispatch) are wired the same way, to their root node's
+  `ai_languageModel` input at index 1.
 - **Research:** ResearchAgent is an AI Agent v2.2 (always a Tools Agent; max 6 iterations)
   with no output parser. Its
   final text (a JSON dossier) is stored as the string `dossier` in Build Draft Input. When
@@ -210,10 +223,10 @@ them to ReviewAgent as facts:
 
 - **Respond nodes on the manual path:** when you start from the Manual Trigger, there is no
   HTTP request to answer. Inspect the final node's output in the editor instead.
-- **Hanging webhook on hard errors:** if an LLM node still fails after its retries and its
-  fallback model (Groq outage, both models' quotas exhausted, or output that fails the schema
-  3 times), the execution stops
-  before a Respond node runs. The caller then gets n8n's error or timeout, not an
+- **No escalated response when an AI node fails after retries:** if an LLM node still fails
+  after its retries and its fallback model (Groq outage, both models' quotas exhausted, or
+  output that fails the schema 3 times), the execution stops before a Respond node runs.
+  The caller then gets n8n's error response (or a timeout from a proxy in between), not an
   `escalated` body. Look in the Executions list, or add an Error Workflow.
 - **Webhook timeouts:** a full run with 3 revisions can take several minutes. Reverse
   proxies or clients in front of n8n may time out first.
@@ -222,9 +235,9 @@ them to ReviewAgent as facts:
   item flowing through the workflow. The design assumes a single request per
   execution.
 - **Model/tool support:** ResearchAgent needs models that support tool calling, both the
-  primary (`openai/gpt-oss-120b` on Groq does) and the fallback (check that
-  `qwen/qwen3.8-27b` supports tool use on Groq; the Tools Agent rejects a chat model without
-  `bindTools`). The Structured Output Parser relies on the model
+  primary (`openai/gpt-oss-120b` on Groq does) and the fallback. `qwen/qwen3.8-27b` was
+  confirmed against Groq's API: it returns `tool_calls`, and `/models` reports
+  `max_completion_tokens` 16384, so the 12000-token setting is valid. The Structured Output Parser relies on the model
   following the format instructions n8n adds to the prompt.
 - **Curly braces:** braces in prompts are safe in the verified versions. The Basic LLM
   Chain doubles every `{`/`}` in its Chat Messages before building the LangChain template,

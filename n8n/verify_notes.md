@@ -38,7 +38,7 @@ The node-level fields `retryOnFail`, `maxTries`, `waitBetweenTries`, `webhookId`
 
 1. **ResearchAgent: `agent` 1.7 had no fallback-model input.** The AI Agent's fallback input exists only in V2.1 and later.
    - Changed `typeVersion` from 1.7 to 2.2 and removed the `agent: "toolsAgent"` key.
-   - I chose 2.2 over 3.1 because it is the lowest version that supports a fallback model while keeping the Tools Agent executor. It also runs on older n8n 1.x instances.
+   - I chose 2.2 over 3.1 because it is the lowest version that supports a fallback model while keeping the Tools Agent executor.
 2. **Tavily Search: the `jsonBody` template `{"query": "{query}", ...}` did no escaping.**
    - In v1.1, a string placeholder that is already inside quotes in a JSON body is replaced as raw text, with no escaping (`utils.js`, `configureToolFunction`). A model query containing `"` or `\` would give invalid JSON. `repairJSON` might or might not recover it.
    - Switched to `specifyBody: "keypair"` with `parametersBody.values = [{name: "query", valueProvider: "modelRequired"}]`. The node then sets the value into the body object, so it is encoded as a proper JSON string.
