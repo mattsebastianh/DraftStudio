@@ -2,7 +2,7 @@
 """Minimal live execution harness for the DraftStudio pipeline.
 
 Loads .env, sends each agent's system prompt + incoming wire message to the
-Groq API, and routes real model outputs through the wire sequence:
+Groq API (falling back to OpenRouter if Groq is unavailable), and routes real model outputs through the wire sequence:
 
   IntakeAgent -> ResearchAgent -> DraftAgent -> ReviewAgent (revision loop,
   max 3 cycles, approval at score >= 80) -> DispatchAgent
@@ -33,7 +33,10 @@ def load_env():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, value = line.partition("=")
-            env[key.strip()] = value.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            env[key.strip()] = value
     return env
 
 
@@ -44,11 +47,20 @@ ENV = load_env()
 # don't re-trigger the same rate limit on every subsequent step.
 ACTIVE_MODEL = ENV["GROQ_PRIMARY_MODEL"]
 
+# Cross-provider fallback: when Groq is unreachable or refuses us (regional
+# block 403, outage, both Groq models exhausted), the rest of the run goes to
+# OpenRouter. Sticky for the same reason as ACTIVE_MODEL.
+FALLBACK_PROVIDER = None
 
-def chat(system_prompt, user_message, max_tokens, model=None):
+
+def openrouter_configured():
+    key = ENV.get("OPENROUTER_API_KEY", "")
+    return bool(key) and not key.startswith("your-") and bool(ENV.get("OPENROUTER_PRIMARY_MODEL"))
+
+
+def _chat_request(base_url, api_key, use_model, system_prompt, user_message, max_tokens, groq_quota_fallback):
+    """One provider call with retries. Returns (body, model_used); raises when the provider is exhausted."""
     global ACTIVE_MODEL
-    use_model = model or ACTIVE_MODEL
-    started = time.time()
     for attempt in range(5):
         payload = {
             "model": use_model,
@@ -60,22 +72,21 @@ def chat(system_prompt, user_message, max_tokens, model=None):
             "temperature": 0.6,
         }
         req = urllib.request.Request(
-            ENV["GROQ_BASE_URL"] + "/chat/completions",
+            base_url + "/chat/completions",
             data=json.dumps(payload).encode(),
             headers={
-                "Authorization": "Bearer " + ENV["GROQ_API_KEY"],
+                "Authorization": "Bearer " + api_key,
                 "Content-Type": "application/json",
                 "User-Agent": "DraftStudio-harness/1.0",
             },
         )
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
-                body = json.load(resp)
-            break
+                return json.load(resp), use_model
         except urllib.error.HTTPError as err:
             detail = err.read().decode(errors="replace")[:300]
             quota_exhausted = err.code == 429 and "tokens per day" in detail.lower()
-            if quota_exhausted and model is None and use_model != ENV["GROQ_FALLBACK_MODEL"]:
+            if quota_exhausted and groq_quota_fallback and use_model != ENV["GROQ_FALLBACK_MODEL"]:
                 print(f"    {use_model} hit its daily token quota, falling back to {ENV['GROQ_FALLBACK_MODEL']}")
                 use_model = ENV["GROQ_FALLBACK_MODEL"]
                 ACTIVE_MODEL = use_model
@@ -96,6 +107,29 @@ def chat(system_prompt, user_message, max_tokens, model=None):
             wait = 2 ** (attempt + 1)
             print(f"    connection error, retrying in {wait:.0f}s... ({err})")
             time.sleep(wait)
+
+
+def chat(system_prompt, user_message, max_tokens, model=None):
+    global FALLBACK_PROVIDER
+    started = time.time()
+    body = None
+    if FALLBACK_PROVIDER is None:
+        try:
+            body, use_model = _chat_request(
+                ENV["GROQ_BASE_URL"], ENV["GROQ_API_KEY"], model or ACTIVE_MODEL,
+                system_prompt, user_message, max_tokens, groq_quota_fallback=model is None,
+            )
+        except (urllib.error.URLError, TimeoutError, OSError):
+            # HTTPError is a URLError subclass: covers 403 region blocks, exhausted retries, outages
+            if not openrouter_configured():
+                raise
+            print("    Groq unavailable, switching to OpenRouter for the rest of the run")
+            FALLBACK_PROVIDER = "openrouter"
+    if body is None:
+        body, use_model = _chat_request(
+            ENV.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"), ENV["OPENROUTER_API_KEY"],
+            ENV["OPENROUTER_PRIMARY_MODEL"], system_prompt, user_message, max_tokens, groq_quota_fallback=False,
+        )
     return {
         "content": body["choices"][0]["message"]["content"],
         "usage": body.get("usage", {}),
@@ -301,6 +335,8 @@ def main():
     log_path = log_dir / f"run_{run_id}.json"
     if ACTIVE_MODEL != ENV["GROQ_PRIMARY_MODEL"]:
         LOG["fallback_model_used"] = ACTIVE_MODEL
+    if FALLBACK_PROVIDER:
+        LOG["fallback_provider_used"] = FALLBACK_PROVIDER
     log_path.write_text(json.dumps(LOG, indent=2) + "\n")
     print(f"\nRun log: {log_path.relative_to(REPO)}")
     if LOG.get("deliverable"):

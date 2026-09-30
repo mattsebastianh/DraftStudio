@@ -102,7 +102,7 @@ It routes the request through IntakeAgent → (ResearchAgent) → DraftAgent →
 - a full I/O log to `tests/live_runs/run_<timestamp>.json` (per-step model, tokens, timing)
 - the approved deliverable to `deliverables/<slug>.md`
 
-The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies) and falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically (see `CLAUDE.md`) — no manual invocation needed.
+The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies) falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out, and switches to OpenRouter (`OPENROUTER_PRIMARY_MODEL`) for the rest of the run if Groq is unreachable or refuses the request (for example a regional block). Set `OPENROUTER_API_KEY` in `.env` to enable that second provider. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically (see `CLAUDE.md`) — no manual invocation needed.
 
 ### The n8n workflow
 
