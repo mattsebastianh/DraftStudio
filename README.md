@@ -45,6 +45,7 @@ The agents communicate over 9 verified **wires** — explicit contracts in `wire
 
 - [claude-code](https://claude.com/claude-code) CLI
 - A [Groq API key](https://console.groq.com/keys) (free tier works)
+- Recommended: an [OpenRouter API key](https://openrouter.ai/keys) as a second provider. Groq can be unreachable from some regions or VPN exit IPs, and the pipeline then fails over to OpenRouter
 
 ### Setup
 
@@ -61,6 +62,9 @@ cp .env.example .env
 |----------|---------|---------|
 | `GROQ_PRIMARY_MODEL` | `llama-3.3-70b-versatile` | Default model for all agent calls |
 | `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-120b` | Used automatically when the primary model's daily token quota (TPD) is exhausted |
+| `OPENROUTER_API_KEY` | (none) | Enables the second provider; without it a Groq outage stops the harness |
+| `OPENROUTER_PRIMARY_MODEL` | none; e.g. `openai/gpt-oss-120b` (required for the fallback) | Model the harness uses on OpenRouter after Groq fails |
+| `N8N_WEBHOOK_API_KEY` | (none) | `X-API-Key` secret for the n8n webhook (n8n holds its own copy) |
 
 Swap models by editing `.env` — nothing else references model IDs. Note the fallback is a reasoning model: give it a generous `max_tokens` budget, since reasoning tokens count against it.
 
@@ -102,11 +106,11 @@ It routes the request through IntakeAgent → (ResearchAgent) → DraftAgent →
 - a full I/O log to `tests/live_runs/run_<timestamp>.json` (per-step model, tokens, timing)
 - the approved deliverable to `deliverables/<slug>.md`
 
-The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies) falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out, and switches to OpenRouter (`OPENROUTER_PRIMARY_MODEL`) for the rest of the run if Groq is unreachable or refuses the request (for example a regional block). Set `OPENROUTER_API_KEY` in `.env` to enable that second provider. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically (see `CLAUDE.md`) — no manual invocation needed.
+The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies), falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out, and switches to OpenRouter (`OPENROUTER_PRIMARY_MODEL`) for the rest of the run if Groq is unreachable or refuses the request (for example a regional block). Set `OPENROUTER_API_KEY` in `.env` to enable that second provider. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically (see `CLAUDE.md`) — no manual invocation needed.
 
 ### The n8n workflow
 
-The same pipeline also exists as an importable n8n workflow, `n8n/draftstudio_pipeline.workflow.json`, triggered by a webhook, a manual test input or a Telegram bot, with a stricter quality gate than the harness (approval also requires no `high` issue and every stated request constraint met). Setup, security checklist, models and behaviour are in [docs/n8n_workflow_design.md](docs/n8n_workflow_design.md); check the file with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
+The same pipeline also exists as an importable n8n workflow, `n8n/draftstudio_pipeline.workflow.json`, triggered by a webhook, a manual test input or a Telegram bot, with a stricter quality gate than the harness (approval also requires no `high` issue and every stated request constraint met). The webhook requires a Header Auth key, and every agent has two LLM providers (Groq and OpenRouter, each the other's fallback). Setup, security checklist, models and behaviour are in [docs/n8n_workflow_design.md](docs/n8n_workflow_design.md); check the file with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
 
 ## Repository Layout
 
@@ -133,7 +137,9 @@ All 5 agents are built, reviewed, pipeline-tested, and **active**. The full wire
 
 **Live execution is verified.** Eight live end-to-end runs against the Groq API have completed (scores 85–94/100), including real client-style draft requests delivered through the full pipeline. The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. One known gap: the ReviewAgent → DraftAgent revision loop and 3-cycle escalation have never fired live — every run so far has been approved on round 0 (run logs are kept locally in `tests/live_runs/`).
 
-**n8n workflow:** imported into a local n8n 2.x and run live (Telegram in and out, the revision loop, a Groq 429 with model fallback). Unlike the harness, the revision loop has fired live there. The stricter gate, the failure branches and the OpenRouter reviewer fallback are built and unit-tested but not yet run live; see the status table in the design doc.
+**n8n workflow:** imported into a local n8n 2.x and run live (Telegram in and out, the revision loop, a Groq 429 with model fallback). Unlike the harness, the revision loop has fired live there. Webhook authentication is verified live (no key and a wrong key get 403, the right key runs the pipeline), and a full run with the stricter gate escalated correctly. The Groq reviewer fallback and the failure branches are built and unit-tested but not yet run live; see the status table in the design doc.
+
+**Provider fallback:** the harness switches to OpenRouter when Groq fails (checked live by forcing an invalid Groq key) and the n8n workflow gives every agent two providers. The unit tests (`python3 -m unittest discover -s tests/unit`) cover the wiring and the harness fallback.
 
 Planned v2 work: priority handling at intake, `client_id` propagation, multi-channel delivery, and a trap brief that forces a sub-80 round-0 score to finally exercise the revision loop live.
 
@@ -148,3 +154,5 @@ Planned v2 work: priority handling at intake, `client_id` propagation, multi-cha
 ## License
 
 DraftStudio is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE): free to use, modify and share for non-commercial purposes. Commercial use needs written permission from the author.
+
+Security issues: see [SECURITY.md](SECURITY.md).

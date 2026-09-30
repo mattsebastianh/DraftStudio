@@ -29,6 +29,8 @@ Models for the harness are configured in `.env` only (the n8n workflow hard-code
 |----------|--------------|------|
 | `GROQ_PRIMARY_MODEL` | `llama-3.3-70b-versatile` | Every agent call, by default |
 | `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-120b` | Taken over automatically if the primary hits its daily token quota |
+| `OPENROUTER_API_KEY` | (none) | Optional second provider; used for the rest of the run if Groq is unreachable or refuses the request |
+| `OPENROUTER_PRIMARY_MODEL` | none; e.g. `openai/gpt-oss-120b` (required for the fallback) | Model used on OpenRouter after that switch |
 
 ## 2. Two Ways to Run the Pipeline
 
@@ -131,6 +133,7 @@ The harness handles all of these on its own; this is what the log lines mean whe
 | `bad JSON from <Agent> (attempt N/3)` | Model returned malformed JSON; harness re-asks | None unless it hits 3/3, which aborts the run and saves the raw reply |
 | `ESCALATION: 3 revision cycles exhausted, score <N>` | Draft never reached 80/100. **No deliverable is written** — a human (you) must take over | Review the run log's final draft + issues, decide manually |
 | `connection error, retrying in Ns...` | Network blip | None — normal |
+| `Groq unavailable, switching to OpenRouter for the rest of the run` | Groq failed permanently (403 region/VPN block, 401, outage, retries exhausted). Every later call goes to OpenRouter and the log records `fallback_provider_used` | None if `OPENROUTER_API_KEY` is set; otherwise the run stops with the Groq error |
 
 One real-world note: a run that mixes both models (e.g. starts on the primary, falls back mid-run) is fine and has happened in practice — `run_20260611_022533.json` started IntakeAgent on `gpt-oss-120b`, hit the daily quota, and finished the remaining three steps on llama with a final score of 94.
 
@@ -162,4 +165,5 @@ The agent registry (`agents/registry.yaml`) tracks status and wiring for all fiv
 | Run exits fast with empty log | Crash before the first API call | Run the same command in the foreground to see the traceback |
 | Run seems hung for minutes | TPM backoff loop, or a long retry chain | `tail` the log; check `ps -o pid,etime,stat -p <pid>` — state `S` is healthy waiting |
 | Every reply unparseable from one agent | System prompt drift / model change | Inspect the `bad_reply_*.txt`, then revisit that agent's `system_prompt.txt` |
-| `rate_limit_exceeded ... (TPD)` even on fallback | Both models out of daily quota | Wait for reset or upgrade tier — there is no third model |
+| `rate_limit_exceeded ... (TPD)` even on fallback | Both Groq models out of daily quota | With `OPENROUTER_API_KEY` set the harness moves to OpenRouter on its own; otherwise wait for reset or upgrade tier |
+| `HTTP 403` from Groq | Regional block, often a VPN exit IP | Switch off the VPN or rely on the OpenRouter fallback |

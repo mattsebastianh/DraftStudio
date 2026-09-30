@@ -11,8 +11,8 @@ and its tests with `python3 -m unittest tests.unit.test_n8n_quality_gate tests.u
 
 | | |
 |---|---|
-| **Status** | Imported into a local n8n 2.x and run live (executions 370-380: Telegram in and out, revision loop, Groq 429 fallback). Inactive. |
-| **Not yet run live** | The stricter approval gate and constraint checks, the OpenRouter reviewer fallback, the failure branches (service error, research error), and multi-part Telegram replies. |
+| **Status** | Imported into a local n8n 2.x and run live (executions 370-380: Telegram in and out, revision loop, Groq 429 fallback; 398-399: webhook Header Auth, 403 without or with a wrong key and a full run with the right one, and the stricter gate escalating a draft with a `high` issue). Inactive. |
+| **Not yet run live** | The Groq reviewer fallback (`Groq Fallback Review`), the failure branches (service error, research error), and multi-part Telegram replies. |
 | **Verified against** | `n8n-nodes-base@2.41.2`, `@n8n/n8n-nodes-langchain@2.41.2`, `n8n-core@2.41.2` (2026-09-29); see [verify_notes.md](../n8n/verify_notes.md). |
 | **Diagrams** | [02_pipeline_architecture_n8n.svg](02_pipeline_architecture_n8n.svg) (this workflow) · [01_pipeline_architecture_groq_harness.svg](01_pipeline_architecture_groq_harness.svg) (the Python harness, for comparison) |
 
@@ -41,14 +41,25 @@ and its tests with `python3 -m unittest tests.unit.test_n8n_quality_gate tests.u
 3. Set the **Restrict to Chat IDs** value on the Telegram Trigger (see the checklist).
 4. Test with **Test workflow** (Manual Trigger → Test Input, a sample vacation-policy memo
    request) or by messaging the bot.
-5. Activate the workflow. The production webhook is `POST <n8n-base>/webhook/draftstudio`.
+5. Activate the workflow. The production webhook is `POST <n8n-base>/webhook/draftstudio`; send the
+   secret as a header, for example (with `N8N_WEBHOOK_API_KEY` in your `.env`):
+
+   ```bash
+   set -a && source .env && set +a
+   curl -X POST <n8n-base>/webhook/draftstudio -H "X-API-Key: $N8N_WEBHOOK_API_KEY" \
+        -H 'Content-Type: application/json' -d '{"request":"..."}'
+   ```
+
+   Without the header, or with a wrong one, n8n answers 403. To rotate the key, edit the
+   `DraftStudio Webhook` credential and update your `.env`.
 
 ### Credentials
 
 | Credential type | Name | Used by | Value |
 |---|---|---|---|
-| Groq API (`groqApi`) | `DraftStudio Groq` | Groq Intake / Research / Draft / Dispatch | Groq API key |
+| Groq API (`groqApi`) | `DraftStudio Groq` | Groq Intake / Research / Draft / Dispatch and Groq Fallback Review | Groq API key |
 | OpenRouter (`openRouterApi`) | `DraftStudio OpenRouter` | OpenRouter Review and every OpenRouter Fallback node | OpenRouter API key |
+| Header Auth (`httpHeaderAuth`) | `DraftStudio Webhook` | Webhook | Name `X-API-Key`, value a long random secret |
 | Telegram API (`telegramApi`), optional | `DraftStudio Telegram` | Telegram Trigger and all `Telegram Reply …` nodes | Bot token from BotFather |
 | Header Auth (`httpHeaderAuth`), optional | `DraftStudio Tavily` | Tavily Search | Name `Authorization`, value `Bearer <Tavily key>` |
 
@@ -79,7 +90,7 @@ delete the **Tavily Search** node: ResearchAgent still works with Wikipedia.
 
 | Trigger | Path | Reply channel |
 |---|---|---|
-| Webhook (`POST /webhook/draftstudio`, body `{ "request": "..." }`) | → Normalize Request | HTTP response from a Respond node |
+| Webhook (`POST /webhook/draftstudio`, header `X-API-Key`, body `{ "request": "..." }`) | → Normalize Request | HTTP response from a Respond node |
 | Manual Trigger → Test Input | → Normalize Request | Inspect the last node's output in the editor |
 | Telegram Trigger → Has Request Text? → Telegram Input | → Normalize Request | Telegram message(s) to the same chat |
 
