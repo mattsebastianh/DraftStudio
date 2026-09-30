@@ -1,5 +1,7 @@
 # DraftStudio
 
+![DraftStudio: five AI agents, one quality gate](docs/article_header.svg)
+
 [![Python 3](https://img.shields.io/badge/python-3-3776AB?logo=python&logoColor=white)](harness/run_pipeline.py)
 [![n8n workflow](https://img.shields.io/badge/n8n-workflow-EA4B71?logo=n8n&logoColor=white)](docs/n8n_workflow_design.md)
 [![Groq](https://img.shields.io/badge/LLM-Groq-F55036)](https://groq.com)
