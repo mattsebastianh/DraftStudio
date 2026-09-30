@@ -57,9 +57,10 @@ delete the **Tavily Search** node: ResearchAgent still works with Wikipedia.
 
 ### Before you activate
 
-- [ ] **Webhook authentication.** The Webhook node ships with Authentication = *None*. Anyone who
-  knows the URL can start a run, and each run makes 5-13 LLM calls on your quota. Set *Header
-  Auth*, *Basic Auth* or *JWT Auth* with its own credential, and consider a hard-to-guess path.
+- [ ] **Webhook authentication.** The Webhook node ships with *Header Auth* and a placeholder
+  credential, **DraftStudio Webhook**. Create it (header `X-API-Key`, a long random value) and
+  send that header on every call; an unconfigured import cannot be called. Never set it to
+  *None*: each run makes 5-13 LLM calls on your quota. Consider a hard-to-guess path too.
   The request text goes straight into the prompts, so prompt injection is possible; the only
   tools any agent can call are Wikipedia and Tavily search, both read-only.
 - [ ] **Telegram chat ids.** The trigger's *Restrict to Chat IDs* holds the placeholder
