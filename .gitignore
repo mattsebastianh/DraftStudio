@@ -19,3 +19,8 @@ node_modules/
 __pycache__/
 *.pyc
 .venv/
+
+# Third-party agent skills installed by tooling (skills-lock.json); not project code
+.agents/
+.claude/skills/figma-*
+.claude/skills/n8n-*

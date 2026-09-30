@@ -1,10 +1,58 @@
 {
   "version": 1,
   "skills": {
+    "figma-create-new-file": {
+      "source": "figma/mcp-server-guide",
+      "sourceType": "github",
+      "skillPath": "skills/figma-create-new-file/SKILL.md",
+      "computedHash": "b9e5a91ed30d5b0650ea485f9e4c8114d998562168360b2ac2d3cbab46602556"
+    },
+    "figma-generate-design": {
+      "source": "figma/mcp-server-guide",
+      "sourceType": "github",
+      "skillPath": "skills/figma-generate-design/SKILL.md",
+      "computedHash": "1a7f35046d62ec3e3d741836c2257ecfab1688ca65144c0dc16e488061d12a36"
+    },
+    "figma-use": {
+      "source": "figma/mcp-server-guide",
+      "sourceType": "github",
+      "skillPath": "skills/figma-use/SKILL.md",
+      "computedHash": "ce6c06d0075968aa6062db47085356e95002ec70c14c2a0e08b2b865ee1e08cb"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
       "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
+    "n8n-expression-syntax": {
+      "source": "czlonkowski/n8n-skills",
+      "sourceType": "github",
+      "skillPath": "skills/n8n-expression-syntax/SKILL.md",
+      "computedHash": "3c721e9b4f91285443166214579718f0757fb6e2f19c1d69c96897b543db1032"
+    },
+    "n8n-mcp-tools-expert": {
+      "source": "czlonkowski/n8n-skills",
+      "sourceType": "github",
+      "skillPath": "skills/n8n-mcp-tools-expert/SKILL.md",
+      "computedHash": "cbadca3d9260a22c26bc8013f6c4b6bfb999139f27e1fa31aae6ec87dd43ef8c"
+    },
+    "n8n-node-configuration": {
+      "source": "czlonkowski/n8n-skills",
+      "sourceType": "github",
+      "skillPath": "skills/n8n-node-configuration/SKILL.md",
+      "computedHash": "095124f1ca42aaf07fe899ca2fa6054f81bd17c6887a875ccd1927804ce62387"
+    },
+    "n8n-validation-expert": {
+      "source": "czlonkowski/n8n-skills",
+      "sourceType": "github",
+      "skillPath": "skills/n8n-validation-expert/SKILL.md",
+      "computedHash": "4a87739599393bb0b34affe3ca03cf71f30389748a00b3c654770e4d635927c9"
+    },
+    "n8n-workflow-patterns": {
+      "source": "czlonkowski/n8n-skills",
+      "sourceType": "github",
+      "skillPath": "skills/n8n-workflow-patterns/SKILL.md",
+      "computedHash": "5567746f9012cc3cb40bc6b352388d1c694f89b6cb554fd035adc7ee46bed850"
     }
   }
 }
