@@ -1,5 +1,13 @@
 # DraftStudio
 
+[![Python 3](https://img.shields.io/badge/python-3-3776AB?logo=python&logoColor=white)](harness/run_pipeline.py)
+[![n8n workflow](https://img.shields.io/badge/n8n-workflow-EA4B71?logo=n8n&logoColor=white)](docs/n8n_workflow_design.md)
+[![Groq](https://img.shields.io/badge/LLM-Groq-F55036)](https://groq.com)
+[![OpenRouter](https://img.shields.io/badge/LLM-OpenRouter-6467F2)](https://openrouter.ai)
+[![Telegram](https://img.shields.io/badge/channel-Telegram-26A5E4?logo=telegram&logoColor=white)](docs/n8n_workflow_design.md#7-telegram)
+[![Built with claude-code](https://img.shields.io/badge/built%20with-claude--code-D97757)](https://claude.com/claude-code)
+![Agents](https://img.shields.io/badge/agents-5%20active-2EA043)
+
 **An autonomous content studio run by AI agents.**
 
 DraftStudio is a five-agent digital worker ecosystem that takes raw client requests and turns them into researched, quality-gated written deliverables. Each agent holds a specific, non-overlapping role — like a staffed editorial studio that runs itself.
