@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node.\n2. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disconnect Tavily Search; ResearchAgent still has Wikipedia.\n3. **Before activating:** set **Authentication** on the *Webhook* node (Header Auth, Basic Auth or JWT). It is *None* by default, so anyone with the URL could run the pipeline on your Groq/Tavily quota.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
+        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node (the five drafting/intake/research/dispatch primaries).\n2. **OpenRouter** credential (type *OpenRouter*) named **DraftStudio OpenRouter**: paste your OpenRouter API key. Used by every `OpenRouter Fallback *` model node.\n3. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disconnect Tavily Search; ResearchAgent still has Wikipedia.\n4. **Before activating:** set **Authentication** on the *Webhook* node (Header Auth, Basic Auth or JWT). It is *None* by default, so anyone with the URL could run the pipeline on your Groq/Tavily quota.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
         "height": 380,
         "width": 520,
         "color": 5
@@ -35,7 +35,7 @@
     },
     {
       "parameters": {
-        "content": "## Models\n- **Primary:** `openai/gpt-oss-120b` on every `Groq <Agent>` Chat Model node.\n- **Fallback:** `qwen/qwen3.8-27b` on every `Groq Fallback <Agent>` node, wired to the *Fallback Model* input (Enable Fallback Model = on). If the primary call fails (e.g. daily quota exhausted / 429), LangChain retries the same prompt on the fallback model.\n- Both use the **DraftStudio Groq** credential. To change a model, edit the Model field on the Groq node; the IDs in `.env` are not read by n8n.",
+        "content": "## Models\n- **Primary:** `openai/gpt-oss-120b` on every `Groq <Agent>` Chat Model node.\n- **ReviewAgent is the exception:** its primary is `qwen/qwen3-235b-a22b-2507` on OpenRouter (`OpenRouter Review`, temperature 0.1), a different model family from the drafter and off Groq's token budget; its fallback is `meta-llama/llama-3.3-70b-instruct` on OpenRouter (`OpenRouter Fallback Review`), a third model family.\n- **Fallback:** `openai/gpt-oss-20b` on OpenRouter, on every `OpenRouter Fallback <Agent>` node, wired to the *Fallback Model* input (Enable Fallback Model = on). If the primary call fails (e.g. daily quota exhausted / 429), LangChain retries the same prompt on the fallback model.\n- Primary nodes use **DraftStudio Groq**, fallback nodes use **DraftStudio OpenRouter**, so a Groq rate limit does not also hit the fallback. To change a model, edit the Model field on the node; the IDs in `.env` are not read by n8n.",
         "height": 380,
         "width": 520,
         "color": 3
@@ -130,6 +130,12 @@
               "name": "issues",
               "value": "={{ [] }}",
               "type": "array"
+            },
+            {
+              "id": "b4e751cd-1348-567f-96c4-7c0d1f090cc3",
+              "name": "chat_id",
+              "value": "={{ $json.telegram_chat_id ?? '' }}",
+              "type": "string"
             }
           ]
         },
@@ -169,8 +175,9 @@
         300
       ],
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -197,24 +204,24 @@
     },
     {
       "parameters": {
-        "model": "qwen/qwen3.8-27b",
+        "model": "openai/gpt-oss-20b",
         "options": {
-          "maxTokensToSample": 4000,
+          "maxTokens": 4000,
           "temperature": 0.3
         }
       },
       "id": "33d44c4f-4a66-5360-8939-ef968d574a5e",
-      "name": "Groq Fallback Intake",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "name": "OpenRouter Fallback Intake",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
       "position": [
         720,
         520
       ],
       "credentials": {
-        "groqApi": {
+        "openRouterApi": {
           "id": "REPLACE_ME",
-          "name": "DraftStudio Groq"
+          "name": "DraftStudio OpenRouter"
         }
       }
     },
@@ -274,7 +281,7 @@
         "needsFallback": true,
         "options": {
           "systemMessage": "You are ResearchAgent, the agency's senior researcher. Your job is to investigate topics and return structured research dossiers with sourced findings.\n\nGOAL: Produce comprehensive, accurate, well-sourced research summaries that serve as the factual foundation for all downstream work.\n\nWORKFLOW:\n1. Use web_search to find sources on the given topic\n2. Use extract_facts to pull key claims, data points, and evidence from sources\n3. Use compile_dossier to assemble findings into a structured dossier\n\nOUTPUT FORMAT — always return a dossier with:\n- topic: the researched subject\n- findings: array of {claim, sources, confidence (0-100), notes}\n- gaps: array of unanswered questions\n- confidence: overall dossier confidence (0-100)\n- sources: full source list with URLs and titles\n\nHARD RULES:\n- Cite every claim with at least one source\n- Assign confidence 0-100 to every finding\n- Always include gaps — be honest about what you could not find\n- Never fabricate sources or invent data\n- If overall confidence < 60%, escalate to human before delivering\n- Maximum 5 web_search attempts per topic — if results are still poor after 5 attempts, escalate\n\nESCALATE TO HUMAN WHEN:\n- No sources found after 3 attempts\n- Topic requires specialized domain expertise\n- Contradictory sources with no clear resolution",
-          "maxIterations": 6
+          "maxIterations": 10
         }
       },
       "id": "bb44bd03-7195-5b6f-82a3-ef736f503a97",
@@ -286,8 +293,8 @@
         -100
       ],
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "maxTries": 5,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -314,24 +321,24 @@
     },
     {
       "parameters": {
-        "model": "qwen/qwen3.8-27b",
+        "model": "openai/gpt-oss-20b",
         "options": {
-          "maxTokensToSample": 12000,
+          "maxTokens": 12000,
           "temperature": 0.3
         }
       },
       "id": "eb42ad06-e344-5928-be6c-25ee42ee5cdf",
-      "name": "Groq Fallback Research",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "name": "OpenRouter Fallback Research",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
       "position": [
         1160,
         120
       ],
       "credentials": {
-        "groqApi": {
+        "openRouterApi": {
           "id": "REPLACE_ME",
-          "name": "DraftStudio Groq"
+          "name": "DraftStudio OpenRouter"
         }
       }
     },
@@ -420,8 +427,14 @@
             {
               "id": "a52db5f8-1cbe-5ed5-be17-0cdbeb8161d0",
               "name": "dossier",
-              "value": "={{ $('ResearchAgent').isExecuted ? $('ResearchAgent').first().json.output : '' }}",
+              "value": "={{ (() => { if (!$('ResearchAgent').isExecuted) return ''; const o = $('ResearchAgent').first().json.output; return /stopped due to max iterations/i.test(typeof o === 'string' ? o : JSON.stringify(o)) ? '' : o; })() }}",
               "type": "string"
+            },
+            {
+              "id": "33174caa-02f5-5985-aadd-c7a01c030aa8",
+              "name": "research_failed",
+              "type": "boolean",
+              "value": "={{ $('ResearchAgent').isExecuted && /stopped due to max iterations/i.test((() => { const o = $('ResearchAgent').first().json.output; return typeof o === 'string' ? o : JSON.stringify(o); })()) }}"
             },
             {
               "id": "036ccb18-e98e-5430-bcff-d4c890054c4f",
@@ -458,7 +471,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.round > 0 ? 'Incoming message on wire `ReviewAgent_to_DraftAgent` (revision_round ' + $json.round + ').' : 'Incoming message on wire `IntakeAgent_to_DraftAgent`.' }}\n\nBrief:\n{{ JSON.stringify($json.brief, null, 2) }}\n\nResearch dossier:\n{{ $json.dossier || '(none: no research was run for this request; state limitations and flag unsupported claims)' }}{{ $json.round > 0 ? '\\n\\nPrevious draft (revise this):\\n' + $json.previous_draft.content + '\\n\\nIssues to resolve:\\n' + $json.issues.map(i => '- [' + i.severity + '] ' + i.description + ' | suggested fix: ' + i.suggested_fix).join('\\n') : '' }}\n\n{{ $json.round > 0 ? 'Revise the draft to resolve every issue.' : 'Write the full deliverable per the brief.' }} Return title, content (the complete deliverable in markdown, meeting the brief's length) and word_count. No placeholder text such as [Insert ...], TODO or TBD.\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
+        "text": "={{ $json.round > 0 ? 'Incoming message on wire `ReviewAgent_to_DraftAgent` (revision_round ' + $json.round + ').' : 'Incoming message on wire `IntakeAgent_to_DraftAgent`.' }}\n\nBrief:\n{{ JSON.stringify($json.brief, null, 2) }}\n\nResearch dossier:\n{{ $json.dossier || ($json.research_failed ? '(none: the research step failed, so no verified sources are available)' : '(none: no research was run for this request)') }}{{ $json.round > 0 ? '\\n\\nPrevious draft (revise this):\\n' + $json.previous_draft.content + '\\n\\nIssues to resolve:\\n' + $json.issues.map(i => '- [' + i.severity + '] ' + i.description + ' | suggested fix: ' + i.suggested_fix).join('\\n') : '' }}\n\n{{ $json.round > 0 ? 'Revise the draft to resolve every issue.' : 'Write the full deliverable per the brief.' }} Return title, content (the complete deliverable in markdown, meeting the brief's length) and word_count. No placeholder text such as [Insert ...], TODO or TBD. Do not invent facts that are not in the brief or the research dossier: no made-up contact details (emails, phone numbers, extensions), statistics, studies, quotes, names or dates. Cite only sources that appear in the dossier. When a detail is needed but not provided, write around it in general terms.\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
         "hasOutputParser": true,
         "needsFallback": true,
         "messages": {
@@ -479,8 +492,8 @@
         300
       ],
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "maxTries": 5,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -507,24 +520,24 @@
     },
     {
       "parameters": {
-        "model": "qwen/qwen3.8-27b",
+        "model": "openai/gpt-oss-20b",
         "options": {
-          "maxTokensToSample": 12000,
+          "maxTokens": 12000,
           "temperature": 0.3
         }
       },
       "id": "29305a04-aa19-5f36-97b9-d4594ff58be3",
-      "name": "Groq Fallback Draft",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "name": "OpenRouter Fallback Draft",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
       "position": [
         1820,
         520
       ],
       "credentials": {
-        "groqApi": {
+        "openRouterApi": {
           "id": "REPLACE_ME",
-          "name": "DraftStudio Groq"
+          "name": "DraftStudio OpenRouter"
         }
       }
     },
@@ -600,6 +613,12 @@
               "name": "length_ok",
               "value": "={{ (() => {\n  const len = String($('Build Draft Input').first().json.brief.length || '');\n  const nums = /word/i.test(len) ? (len.replace(/,/g, '').match(/\\d+/g) || []).map(Number) : [];\n  if (nums.length === 0) return true;\n  const wc = (($json.output.draft.content || '').trim().split(/\\s+/).filter(w => w.length > 0).length);\n  return wc >= Math.min.apply(null, nums) * 0.85 && wc <= Math.max.apply(null, nums) * 1.15;\n})() }}",
               "type": "boolean"
+            },
+            {
+              "id": "82e4e770-ff8c-5dce-a615-e8b04d8542c2",
+              "name": "constraint_failures",
+              "type": "array",
+              "value": "={{ (() => {\n  const req = String($('Build Draft Input').first().json.raw_request || '');\n  const content = String($json.output.draft.content || '');\n  const wc = content.trim().split(/\\s+/).filter(w => w.length > 0).length;\n  const out = [];\n  const numWords = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };\n  const toNum = s => { const k = String(s).toLowerCase().replace(/,/g, ''); return numWords[k] || parseInt(k, 10) || 0; };\n  const ending = req.match(/end(?:s|ing)?\\s+(?:with|on)\\s+the\\s+(?:sentence|phrase|line|words?)\\s*:?\\s*[\"“']([^\"”']+)[\"”']/i);\n  if (ending) {\n    const trim = s => s.trim().replace(/[\\s*_\"“”']+$/, '');\n    if (!trim(content).endsWith(trim(ending[1]))) out.push('The draft must end with the sentence \"' + ending[1].trim() + '\" and nothing after it.');\n  }\n  const exact = req.match(/exactly\\s+(\\d[\\d,]*)\\s+words?/i);\n  if (exact) {\n    const n = parseInt(exact[1].replace(/,/g, ''), 10);\n    if (Math.abs(wc - n) > Math.max(5, n * 0.05)) out.push('The request asks for exactly ' + n + ' words; the draft has ' + wc + ' (allowed ' + Math.round(n * 0.95) + '-' + Math.round(n * 1.05) + ').');\n  }\n  const bul = req.match(/(?:bulleted\\s+list\\s+of\\s+at\\s+least|at\\s+least)\\s+(\\w+)\\s+(?:bullet(?:ed)?\\s+)?(?:items?|points?|bullets?)/i);\n  if (bul) {\n    const n = toNum(bul[1]);\n    const have = (content.match(/^\\s*[-*•]\\s+\\S/gm) || []).length;\n    if (n > 0 && have < n) out.push('The request asks for at least ' + n + ' bullet items; the draft has ' + have + '.');\n  }\n  return out;\n})() }}"
             }
           ]
         },
@@ -618,7 +637,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=Incoming message on wire `DraftAgent_to_ReviewAgent` (revision_round {{ $json.round }}).\n\nBrief:\n{{ JSON.stringify($json.brief, null, 2) }}\n\nDraft title: {{ $json.draft.title }}\nDraft (markdown):\n{{ $json.draft.content }}\n\nDeterministic checks computed by the workflow (treat as facts):\n- measured word_count: {{ $json.word_count }} (draft self-reported {{ $json.draft.word_count }})\n- length within 15% of the brief's word target: {{ $json.length_ok }}\n- placeholder text detected: {{ $json.has_placeholder }}\n\nEvaluate the draft against the brief. Return dimension_scores (clarity, accuracy, completeness, tone_alignment, each 0-100), score (composite 0-100, consistent with the dimensions), requirements (array of requirement + passed boolean), issues (array of severity critical/high/medium/low, description, suggested_fix; empty if nothing to flag) and status (derive it mechanically: \"approved\" when score >= 80 and no issue is critical, else \"revision_required\"; non-critical issues do not block approval).\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
+        "text": "=Incoming message on wire `DraftAgent_to_ReviewAgent` (revision_round {{ $json.round }}).\n\nBrief:\n{{ JSON.stringify($json.brief, null, 2) }}\n\nDraft title: {{ $json.draft.title }}\nDraft (markdown):\n{{ $json.draft.content }}\n\nDeterministic checks computed by the workflow (treat as facts):\n- measured word_count: {{ $json.word_count }} (draft self-reported {{ $json.draft.word_count }})\n- length within 15% of the brief's word target: {{ $json.length_ok }}\n- placeholder text detected: {{ $json.has_placeholder }}\n- explicit request constraints that failed (computed by the workflow, treat as facts): {{ ($json.constraint_failures || []).length ? $json.constraint_failures.join(' | ') : 'none' }}\n\nOriginal client request (check every explicit requirement in it, not only the brief):\n{{ $json.raw_request }}\n\nEvaluate the draft against the brief. Return dimension_scores (clarity, accuracy, completeness, tone_alignment, each 0-100), score (composite 0-100, consistent with the dimensions), requirements (array of requirement + passed boolean), issues (array of severity critical/high/medium/low, description, suggested_fix; empty if nothing to flag) and status (derive it mechanically: \"approved\" when score >= 80 and no issue is critical or high, else \"revision_required\"; medium and low issues do not block approval). Flag as high any specific claim (statistic, study, date, contact detail, quote) that is not in the brief or the dossier.\n\nNote: in this n8n workflow you have no callable tools; perform the steps of your workflow yourself and return only the structured result.",
         "hasOutputParser": true,
         "needsFallback": true,
         "messages": {
@@ -639,54 +658,8 @@
         300
       ],
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
-    },
-    {
-      "parameters": {
-        "model": "openai/gpt-oss-120b",
-        "options": {
-          "maxTokensToSample": 10000,
-          "temperature": 0.3
-        }
-      },
-      "id": "6d318565-5040-5e58-bd0d-55f2a7a8ecbe",
-      "name": "Groq Review",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
-      "position": [
-        2200,
-        520
-      ],
-      "credentials": {
-        "groqApi": {
-          "id": "REPLACE_ME",
-          "name": "DraftStudio Groq"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "model": "qwen/qwen3.8-27b",
-        "options": {
-          "maxTokensToSample": 10000,
-          "temperature": 0.3
-        }
-      },
-      "id": "1c03e4ec-6ea4-504a-b4ce-4c8e57065cad",
-      "name": "Groq Fallback Review",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
-      "position": [
-        2340,
-        520
-      ],
-      "credentials": {
-        "groqApi": {
-          "id": "REPLACE_ME",
-          "name": "DraftStudio Groq"
-        }
-      }
+      "maxTries": 5,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -762,6 +735,12 @@
               "type": "boolean"
             },
             {
+              "id": "a5219d88-3c86-5222-9fc0-387b10a2f9a5",
+              "name": "constraint_failures",
+              "type": "array",
+              "value": "={{ $('Deterministic Checks').last().json.constraint_failures }}"
+            },
+            {
               "id": "bc12d188-5208-5b39-8d55-d7ef20df36f0",
               "name": "review",
               "value": "={{ $json.output }}",
@@ -782,13 +761,13 @@
             {
               "id": "be8f3edb-0c24-560c-8c21-636bc91ea6c1",
               "name": "issues",
-              "value": "={{ ($json.output.issues || []).concat(\n  $('Deterministic Checks').last().json.has_placeholder ? [ { severity: 'critical', description: 'Placeholder text detected in the draft (e.g. [Insert ...], TODO, TBD, lorem ipsum).', suggested_fix: 'Replace every placeholder with real content or remove it.' } ] : [],\n  $('Deterministic Checks').last().json.length_ok ? [] : [ { severity: 'high', description: 'Measured word count ' + $('Deterministic Checks').last().json.word_count + ' is outside 15% of the brief length (' + $('Deterministic Checks').last().json.brief.length + ').', suggested_fix: 'Expand or trim the draft to the requested length.' } ]\n) }}",
+              "value": "={{ ($json.output.issues || []).concat(\n  $('Deterministic Checks').last().json.has_placeholder ? [ { severity: 'critical', description: 'Placeholder text detected in the draft (e.g. [Insert ...], TODO, TBD, lorem ipsum).', suggested_fix: 'Replace every placeholder with real content or remove it.' } ] : [],\n  $('Deterministic Checks').last().json.length_ok ? [] : [ { severity: 'high', description: 'Measured word count ' + $('Deterministic Checks').last().json.word_count + ' is outside 15% of the brief length (' + $('Deterministic Checks').last().json.brief.length + ').', suggested_fix: 'Expand or trim the draft to the requested length.' } ],\n  ($('Deterministic Checks').last().json.constraint_failures || []).map(f => ({ severity: 'critical', description: f, suggested_fix: 'Revise the draft so that it satisfies this: ' + f }))\n) }}",
               "type": "array"
             },
             {
               "id": "a2b247ed-ad3d-5954-b4af-c6993af6de35",
               "name": "approved",
-              "value": "={{ Number($json.output.score) >= 80 && !$('Deterministic Checks').last().json.has_placeholder && (($json.output.issues || []).filter(i => String(i.severity).toLowerCase() === 'critical').length) === 0 }}",
+              "value": "={{ (() => { const d = $('Deterministic Checks').last().json; const sev = i => String(i.severity).toLowerCase(); const blockers = ($json.output.issues || []).filter(i => sev(i) === 'critical' || sev(i) === 'high'); return Number($json.output.score) >= 80 && !d.has_placeholder && d.length_ok && (d.constraint_failures || []).length === 0 && blockers.length === 0; })() }}",
               "type": "boolean"
             }
           ]
@@ -864,8 +843,8 @@
         60
       ],
       "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      "maxTries": 5,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -892,24 +871,24 @@
     },
     {
       "parameters": {
-        "model": "qwen/qwen3.8-27b",
+        "model": "openai/gpt-oss-20b",
         "options": {
-          "maxTokensToSample": 3000,
+          "maxTokens": 3000,
           "temperature": 0.3
         }
       },
       "id": "dcb1c371-392b-52a4-8804-00d39490f376",
-      "name": "Groq Fallback Dispatch",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "name": "OpenRouter Fallback Dispatch",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
       "position": [
         3080,
         280
       ],
       "credentials": {
-        "groqApi": {
+        "openRouterApi": {
           "id": "REPLACE_ME",
-          "name": "DraftStudio Groq"
+          "name": "DraftStudio OpenRouter"
         }
       }
     },
@@ -1014,6 +993,12 @@
               "type": "string"
             },
             {
+              "id": "94a73a97-f8f0-55fa-a467-921f6ab42cd7",
+              "name": "research_failed",
+              "type": "boolean",
+              "value": "={{ $('Build Draft Input').first().json.research_failed }}"
+            },
+            {
               "id": "21cfb121-b148-58a0-9651-55ba789beeb2",
               "name": "round",
               "value": "={{ $json.round + 1 }}",
@@ -1054,7 +1039,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'escalated', run_id: $json.run_id, reason: 'Revision cap reached: ' + $json.round + ' revision cycles exhausted and the draft still fails the quality gate (score ' + $json.score + '; needs >= 80, no critical issue and no placeholder text). Needs human review.', last_score: $json.score, rounds: $json.round, issues: $json.issues, last_draft: $json.draft }) }}",
+        "responseBody": "={{ JSON.stringify({ status: 'escalated', run_id: $json.run_id, reason: 'Revision cap reached: ' + $json.round + ' revision cycles exhausted and the draft still fails the quality gate (score ' + $json.score + '; needs >= 80 with no critical or high issue, no placeholder text and every stated constraint met). Needs human review.', last_score: $json.score, rounds: $json.round, issues: $json.issues, last_draft: $json.draft }) }}",
         "options": {
           "responseCode": 200
         }
@@ -1067,6 +1052,338 @@
         3240,
         720
       ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "fe200862-f087-5883-a68a-abec4cf3b606",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        640
+      ],
+      "webhookId": "81e64816-5830-5365-9cd1-d7905ab0134e",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Telegram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "050feb75-a2fb-5f66-bae7-038c31a57d7b",
+              "leftValue": "={{ $json.message?.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d04515a2-cce3-5eb5-b9a3-7ec58110dff8",
+      "name": "Has Request Text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "21752bf0-58b5-5062-bcbc-2b90b7885a10",
+              "name": "body",
+              "value": "={{ { request: $json.message.text } }}",
+              "type": "object"
+            },
+            {
+              "id": "34b6e39b-8a5a-5fd8-a610-22b06a6c2493",
+              "name": "telegram_chat_id",
+              "value": "={{ String($json.message.chat.id) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "fa707264-33d7-5472-ab79-43e2306519d4",
+      "name": "Telegram Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "726b97e0-b85f-56c5-a970-f1bc1f70723a",
+              "leftValue": "={{ $('Normalize Request').last().json.chat_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "7543a43a-8aca-55fb-a3f6-f4db2e161f84",
+      "name": "Reply on Telegram? (delivered)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3560,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Normalize Request').last().json.chat_id }}",
+        "text": "={{ ('Approved · score ' + $('Compute Verdict').last().json.score + ' · ' + $('Compute Verdict').last().json.round + ' revision(s)\\n\\n' + $('Compute Verdict').last().json.draft.content).substring(0, 4000) }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "89f1f5d4-5098-58cd-9d05-6654850f0b30",
+      "name": "Telegram Reply Delivered",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3780,
+        60
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Telegram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ef82aafc-5060-582f-823d-f07e672e0961",
+              "leftValue": "={{ $('Normalize Request').last().json.chat_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "9becfee9-abd6-5311-9bba-1d1f22330713",
+      "name": "Reply on Telegram? (escalated)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3460,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Normalize Request').last().json.chat_id }}",
+        "text": "={{ ('Needs human review: the draft still fails the quality gate after ' + $json.round + ' revision cycles (last score ' + $json.score + ', needs >= 80 with no critical or high issue and every stated constraint met). Top issues:\\n' + $json.issues.slice(0, 5).map(i => '- [' + i.severity + '] ' + i.description).join('\\n')).substring(0, 4000) }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "3d0f25e0-d0cd-5dbb-a890-f9f83bd80337",
+      "name": "Telegram Reply Escalated",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3680,
+        720
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Telegram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'needs_clarification', run_id: $('Normalize Request').last().json.run_id, message: \"I couldn't turn that into a writing request. Tell me what to write: the topic, who it's for, the tone and the length. For example: \\\"A 300-word memo to all staff announcing our new vacation policy.\\\"\" }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "bcf29dcb-2136-5dda-af43-9d0afbfdbfff",
+      "name": "Respond Needs Clarification",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "221b3851-d844-531d-a3d5-11f5455975a4",
+              "leftValue": "={{ $('Normalize Request').last().json.chat_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "87c3a9c3-cb43-5349-823e-ca7b46d387a8",
+      "name": "Reply on Telegram? (clarify)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1180,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Normalize Request').last().json.chat_id }}",
+        "text": "=I couldn't turn that into a writing request. Tell me what to write: the topic, who it's for, the tone and the length. For example: \"A 300-word memo to all staff announcing our new vacation policy.\"",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "1f15ec64-a66e-5d88-9e18-c2c6d629a02f",
+      "name": "Telegram Reply Clarify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1400,
+        860
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Telegram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen3-235b-a22b-2507",
+        "options": {
+          "maxTokens": 4000,
+          "temperature": 0.1
+        }
+      },
+      "id": "fb886c54-be97-5687-aa26-c7fbab8d1105",
+      "name": "OpenRouter Review",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        520
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio OpenRouter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-3.3-70b-instruct",
+        "options": {
+          "maxTokens": 4000,
+          "temperature": 0.1
+        }
+      },
+      "id": "8f0208be-9bd2-5ca0-baa2-256cdf31d35a",
+      "name": "OpenRouter Fallback Review",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        2340,
+        520
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio OpenRouter"
+        }
+      }
     }
   ],
   "connections": {
@@ -1119,6 +1436,13 @@
         [
           {
             "node": "Needs Research?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Needs Clarification",
             "type": "main",
             "index": 0
           }
@@ -1278,7 +1602,7 @@
         ]
       ]
     },
-    "Groq Fallback Intake": {
+    "OpenRouter Fallback Intake": {
       "ai_languageModel": [
         [
           {
@@ -1311,7 +1635,7 @@
         ]
       ]
     },
-    "Groq Fallback Research": {
+    "OpenRouter Fallback Research": {
       "ai_languageModel": [
         [
           {
@@ -1355,7 +1679,7 @@
         ]
       ]
     },
-    "Groq Fallback Draft": {
+    "OpenRouter Fallback Draft": {
       "ai_languageModel": [
         [
           {
@@ -1373,28 +1697,6 @@
             "node": "DraftAgent",
             "type": "ai_outputParser",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Groq Review": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "ReviewAgent",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Groq Fallback Review": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "ReviewAgent",
-            "type": "ai_languageModel",
-            "index": 1
           }
         ]
       ]
@@ -1421,7 +1723,7 @@
         ]
       ]
     },
-    "Groq Fallback Dispatch": {
+    "OpenRouter Fallback Dispatch": {
       "ai_languageModel": [
         [
           {
@@ -1439,6 +1741,131 @@
             "node": "DispatchAgent",
             "type": "ai_outputParser",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Has Request Text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Request Text?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Telegram Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Delivered": {
+      "main": [
+        [
+          {
+            "node": "Reply on Telegram? (delivered)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply on Telegram? (delivered)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reply Delivered",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Respond Escalated": {
+      "main": [
+        [
+          {
+            "node": "Reply on Telegram? (escalated)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply on Telegram? (escalated)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reply Escalated",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Respond Needs Clarification": {
+      "main": [
+        [
+          {
+            "node": "Reply on Telegram? (clarify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply on Telegram? (clarify)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reply Clarify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "OpenRouter Review": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ReviewAgent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Fallback Review": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ReviewAgent",
+            "type": "ai_languageModel",
+            "index": 1
           }
         ]
       ]

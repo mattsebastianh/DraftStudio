@@ -43,8 +43,10 @@ typeVersion and top-level parameter name was checked against the published node 
 
 | Credential type | Name | Used by | Value |
 |---|---|---|---|
-| Groq API (`groqApi`) | `DraftStudio Groq` | Groq Intake / Research / Draft / Review / Dispatch and Groq Fallback Intake / Research / Draft / Review / Dispatch | Your Groq API key |
+| Groq API (`groqApi`) | `DraftStudio Groq` | Groq Intake / Research / Draft / Dispatch | Your Groq API key |
+| OpenRouter (`openRouterApi`) | `DraftStudio OpenRouter` | OpenRouter Review and OpenRouter Fallback Intake / Research / Draft / Review / Dispatch | Your OpenRouter API key |
 | Header Auth (`httpHeaderAuth`), optional | `DraftStudio Tavily` | Tavily Search | Name `Authorization`, value `Bearer <Tavily API key>` |
+| Telegram API (`telegramApi`), optional | `DraftStudio Telegram` | Telegram Trigger, Telegram Reply Delivered, Telegram Reply Escalated | Bot token from BotFather |
 
 If you don't set up Tavily, delete or disconnect the **Tavily Search** node. ResearchAgent
 still works with the Wikipedia tool. Keep keys out of the JSON file: they live only in n8n's
@@ -53,17 +55,36 @@ credential store.
 ## Models
 
 - Primary: `openai/gpt-oss-120b` on every `Groq <Agent>` Chat Model node.
-- Fallback: `qwen/qwen3.8-27b` on every `Groq Fallback <Agent>` node. Each chain/agent has
+- Fallback: `openai/gpt-oss-20b` on OpenRouter, on every
+  `OpenRouter Fallback <Agent>` node. It is a smaller, cheaper sibling of the primary and is
+  served through OpenRouter's own provider accounts, so a Groq org rate limit (429) does not
+  also hit the fallback. Each chain/agent has
   **Enable Fallback Model** on (`needsFallback: true`) and the fallback node is wired to its
   second model input (*Fallback Model*, `ai_languageModel` index 1). If a call to the primary
   model throws (for example a 429 when the daily token quota is exhausted), LangChain's
   `withFallbacks` re-runs the same prompt on the fallback model. This needs Basic LLM Chain
   1.2, or 1.4 and later (1.5 is used; 1.3 hides the option) and AI Agent >= 2.1 (ResearchAgent uses 2.2).
+- **ReviewAgent is the exception.** Its primary is `qwen/qwen3-235b-a22b-2507` on OpenRouter
+  (`OpenRouter Review`, temperature 0.1, max 4000 output tokens: it is not a reasoning model, so
+  no budget goes to hidden reasoning). A different model family from the drafter avoids the
+  judge favouring its own style, and moving the review off Groq takes about 4000 tokens per
+  round out of Groq's per-minute budget (execution 377 hit that limit in ReviewAgent). Its
+  fallback is `meta-llama/llama-3.3-70b-instruct` on OpenRouter (`OpenRouter Fallback Review`, temperature 0.1, max 4000
+  output tokens): a third model family (not Qwen, not gpt-oss) and not a reasoning model, since
+  the gpt-oss-20b fallback returned an empty response once (execution 378). Both review models
+  now run on OpenRouter, so an OpenRouter outage or empty credit balance takes out the review
+  and its fallback together; the trade was made to keep the review off Groq's rate limit.
+  About $0.001-0.002 per review at list prices.
 - Max output tokens (`maxTokensToSample`, sent to Groq as `max_tokens`) are sized for
   reasoning models, which spend part of the budget on hidden reasoning: Intake 4000,
   Research 12000, Draft 12000, Review 10000, Dispatch 3000. Primary and fallback nodes use
-  the same values. Temperature is 0.3.
-- n8n does not read `.env`. To change a model, edit the Model field on the Groq node.
+  the same values (the OpenRouter option is `maxTokens`). Temperature is 0.3.
+- n8n does not read `.env`. To change a model, edit the Model field on the node. `.env` keeps
+  `OPENROUTER_PRIMARY_MODEL=openai/gpt-oss-120b` and
+  `OPENROUTER_FALLBACK_MODEL=openai/gpt-oss-20b` and
+  `OPENROUTER_REVIEW_MODEL=qwen/qwen3-235b-a22b-2507` as the reference values. The workflow
+  hard-codes the fallback ID on its four OpenRouter fallback nodes and the review ID on
+  `OpenRouter Review`; the primary ID is only for the Python harness.
 
 ## Request / response
 
@@ -118,7 +139,7 @@ in n8n's Executions list.
 ```
 Webhook (POST /draftstudio) ─┐
 Manual Trigger ──► Test Input ┴► Normalize Request
-  → IntakeAgent (Basic LLM Chain + Groq Intake + Groq Fallback Intake + Intake Parser)
+  → IntakeAgent (Basic LLM Chain + Groq Intake + OpenRouter Fallback Intake + Intake Parser)
   → Needs Research?
        true  → ResearchAgent (AI Agent + Groq Research + Wikipedia + Tavily Search) → Build Draft Input
        false → Build Draft Input
@@ -147,8 +168,8 @@ Manual Trigger ──► Test Input ┴► Normalize Request
   delivery_note,status}}`. Each chain's result is at `$json.output`. Severity and status are
   plain strings rather than enums, so a capitalised value doesn't fail parsing. The verdict
   compares severities without regard to case.
-- **Fallback models:** every chain/agent also has a `Groq Fallback <Agent>` model node (see
-  Models). The flow diagram shows Groq Fallback Intake as an example. The other four
+- **Fallback models:** every chain/agent also has an `OpenRouter Fallback <Agent>` model node (see
+  Models). The flow diagram shows OpenRouter Fallback Intake as an example. The other four
   (Research, Draft, Review, Dispatch) are wired the same way, to their root node's
   `ai_languageModel` input at index 1.
 - **Research:** ResearchAgent is an AI Agent v2.2 (always a Tools Agent; max 6 iterations)
@@ -220,9 +241,29 @@ them to ReviewAgent as facts:
 - `critical_count`: the number of ReviewAgent issues with severity `critical`, ignoring case.
 - `issues`: ReviewAgent's issues, plus a `critical` placeholder issue when `has_placeholder`
   is true, plus a `high` length issue when `length_ok` is false. The next revision sees these.
-- `approved = score >= 80 && !has_placeholder && critical_count == 0`. The workflow computes
-  this itself instead of trusting the model's `status`. A length miss alone does not block
-  approval, because it is a `high` issue (as in the plan). It is still reported in `issues`.
+- `approved` = score >= 80, no placeholder, `length_ok`, no `constraint_failures`, and no ReviewAgent
+  issue with severity `critical` or `high` (case ignored). The workflow computes this itself
+  instead of trusting the model's `status`: executions 378-380 showed the model saying
+  `approved` while listing placeholders, and `revision_required` for a draft the old rule
+  shipped. Earlier versions let `high` issues through (execution 370 shipped a 244-word memo
+  against a 300-word target); they now block, so expect more revision rounds and more
+  escalations. `medium` and `low` issues are reported but do not block.
+
+**Request constraints** (`constraint_failures`, Deterministic Checks). Expressions read the
+original request text and check the draft: (1) *end with the sentence "X"* (trailing
+markdown emphasis and quotes are ignored, text after it fails), (2) *exactly N words*, allowed
+N +-5% (a model cannot hit an exact count; the check is the draft's whole-text count), and
+(3) *at least N bullet items* (N as digits or one..ten; counts lines starting with `-`, `*` or
+a bullet). Each failure becomes a `critical` issue with a fix, so DraftAgent sees it on the
+next round, and ReviewAgent receives the failures and the original request as well. Other
+phrasings are not detected; extend the regexes when a real request needs it.
+
+**Research and invented details.** If ResearchAgent ends with `Agent stopped due to max
+iterations.` (execution 380), Build Draft Input clears the dossier and sets `research_failed`, so
+DraftAgent is told that no verified sources exist instead of citing an error string. Research
+iterations are capped at 10 (was 6). DraftAgent is told not to invent contact details,
+statistics, studies, quotes, names or dates, and ReviewAgent flags any such unsupported claim
+as `high`, which blocks approval.
 
 ## Known n8n limits
 
@@ -240,9 +281,10 @@ them to ReviewAgent as facts:
   item flowing through the workflow. The design assumes a single request per
   execution.
 - **Model/tool support:** ResearchAgent needs models that support tool calling, both the
-  primary (`openai/gpt-oss-120b` on Groq does) and the fallback. `qwen/qwen3.8-27b` was
-  confirmed against Groq's API: it returns `tool_calls`, and `/models` reports
-  `max_completion_tokens` 16384, so the 12000-token setting is valid. The Structured Output Parser relies on the model
+  primary (`openai/gpt-oss-120b` on Groq does) and the fallback. OpenRouter's `/models` list
+  shows `tools` in `supported_parameters` for `openai/gpt-oss-20b`, with
+  `max_completion_tokens` 32768, so the 12000-token setting is valid. That check is of the
+  catalog metadata only; no tool call has been run against the fallback yet. The Structured Output Parser relies on the model
   following the format instructions n8n adds to the prompt.
 - **Curly braces:** braces in prompts are safe in the verified versions. The Basic LLM
   Chain doubles every `{`/`}` in its Chat Messages before building the LangChain template,
@@ -263,3 +305,38 @@ them to ReviewAgent as facts:
   `"{query}"` would do a raw text substitution with no escaping. Tavily's defaults
   (`max_results` 5, `search_depth` "basic") apply. To move to `httpRequestTool`, use the same
   URL, header credential and a `query` body field filled by `$fromAI('query')`.
+
+## Telegram entry and reply
+
+Messages to the bot start the pipeline, and the result is sent back to the same chat.
+
+```
+Telegram Trigger (message) -> Has Request Text? -yes-> Telegram Input -> Normalize Request -> ...
+Respond Delivered  -> Reply on Telegram? (delivered)  -yes-> Telegram Reply Delivered
+Respond Escalated  -> Reply on Telegram? (escalated)  -yes-> Telegram Reply Escalated
+```
+
+- **Filter:** updates without message text (stickers, photos) are dropped silently.
+- **chat_id:** `Telegram Input` writes the chat id to a top-level `telegram_chat_id` field and
+  `Normalize Request` copies it to `chat_id` (empty for Webhook and Manual runs). The Webhook's
+  payload lives under `body`, so a webhook caller can never set `chat_id` or make the workflow
+  message an arbitrary chat. The reply gates test `chat_id` is not empty, so Webhook and Manual
+  runs never call Telegram.
+- **Replies:** plain text (no parse mode: Groq Markdown often breaks Telegram's parser), cut to
+  4000 characters (Telegram's limit is 4096). `**bold**` shows as literal asterisks.
+  Delivered sends a header line (score, revision count) and the deliverable only, so the
+  requested closing line stays last; the DispatchAgent's delivery note is not sent (it said
+  "attached" when nothing was). Text over 4000 characters is cut, which can drop the ending.
+  Escalated
+  sends the last score and the top five issues, with a needs-human-review notice.
+- **One webhook per bot:** activating the trigger points the bot's Telegram webhook at this
+  workflow (`WEBHOOK_URL` must be public HTTPS). Use a bot no other workflow uses, or that
+  workflow stops receiving messages.
+- **Restrict who can use it:** open the trigger's *Additional Fields* and add **Restrict to
+  Chat IDs** (and/or User IDs). Otherwise anyone who finds the bot can spend your Groq quota.
+- **Unclear messages:** chat messages are not always writing requests ("where is my cake"), and
+  the model then answers in prose instead of JSON, which the Intake Parser rejects. IntakeAgent
+  uses **On Error: Continue (using error output)** (after its 3 retries), and the error output goes
+  to `Respond Needs Clarification` (webhook JSON `status: needs_clarification`) and, for Telegram
+  runs, `Telegram Reply Clarify`, which asks for topic, audience, tone and length.
+  Failures in later agents still stop the run without a reply.
