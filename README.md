@@ -114,10 +114,6 @@ The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies), fa
 
 The same pipeline also exists as an importable n8n workflow, `n8n/draftstudio_pipeline.workflow.json`, triggered by a webhook, a manual test input or a Telegram bot, with a stricter quality gate than the harness (approval also requires no `high` issue and every stated request constraint met). The webhook requires a Header Auth key, and every agent has two LLM providers (Groq and OpenRouter, each the other's fallback). Setup, security checklist, models and behaviour are in [docs/n8n_workflow_design.md](docs/n8n_workflow_design.md); check the file with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
 
-The workflow as it looks on the n8n canvas after import:
-
-![DraftStudio pipeline on the n8n canvas](docs/n8n_workflow_01.png)
-
 ## Repository Layout
 
 ```
