@@ -204,7 +204,7 @@ class PromptAndReplyTests(unittest.TestCase):
         text = self.nodes["Telegram Reply Delivered"]["parameters"]["text"]
         self.assertNotIn("delivery_note", text)
         self.assertIn("draft.content", text)
-        self.assertIn("substring(0, 4000)", text)
+        self.assertIn("substring(0, 3900)", text)
         self.assertTrue(text.startswith("={{ ('Approved"))
 
     def test_escalation_messages_describe_the_stricter_gate(self):
@@ -212,6 +212,163 @@ class PromptAndReplyTests(unittest.TestCase):
         tg = self.nodes["Telegram Reply Escalated"]["parameters"]["text"]
         self.assertIn("high", body)
         self.assertIn("high", tg)
+
+
+@unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
+class ReviewFindingsTests(unittest.TestCase):
+    """Regression tests for the PR review findings (2, 3, 4, 5, 6, 7)."""
+
+    # -- helpers ---------------------------------------------------------------------------
+    def failures(self, content, request):
+        return _evaluate(
+            _assignment("Deterministic Checks", "constraint_failures"),
+            {"output": {"draft": {"content": content}}},
+            {"Build Draft Input": {"raw_request": request}},
+        )
+
+    def length_ok(self, brief_length, words):
+        return _evaluate(
+            _assignment("Deterministic Checks", "length_ok"),
+            {"output": {"draft": {"content": _words(words)}}},
+            {"Build Draft Input": {"brief": {"length": brief_length}}},
+        )
+
+    def placeholder(self, content):
+        return _evaluate(
+            _assignment("Deterministic Checks", "has_placeholder"), {"output": {"draft": {"content": content}}}
+        )
+
+    # -- finding 2: apostrophes in the required sentence ------------------------------------
+    def test_required_sentence_may_contain_an_apostrophe(self):
+        req = 'Write a note. End with the sentence "Don\'t hesitate to ask."'
+        self.assertEqual(self.failures("Hello.\n\nDon't hesitate to ask.", req), [])
+        bad = self.failures("Hello.\n\nThanks.", req)
+        self.assertEqual(len(bad), 1)
+        self.assertIn("Don't hesitate to ask.", bad[0])
+
+    def test_curly_quoted_required_sentence(self):
+        req = "End with the sentence \u201cSee you Friday.\u201d"
+        self.assertEqual(self.failures("Hi.\n\nSee you Friday.", req), [])
+
+    # -- finding 4: length bounds ----------------------------------------------------------
+    def test_upper_bounds_are_ceilings_not_targets(self):
+        self.assertTrue(self.length_ok("under 200 words", 120))
+        self.assertFalse(self.length_ok("under 200 words", 260))
+        self.assertTrue(self.length_ok("max 300 words", 280))
+        self.assertFalse(self.length_ok("no more than 300 words", 320))
+
+    def test_lower_bounds_are_floors_not_targets(self):
+        self.assertTrue(self.length_ok("at least 500 words", 900))
+        self.assertFalse(self.length_ok("at least 500 words", 300))
+        self.assertTrue(self.length_ok("no fewer than 500 words", 900))
+        self.assertFalse(self.length_ok("no less than 500 words", 300))
+        self.assertTrue(self.length_ok("more than 500 words", 900))
+        self.assertTrue(self.length_ok("less than 200 words", 120))
+        self.assertFalse(self.length_ok("fewer than 200 words", 260))
+
+    def test_targets_and_ranges_keep_a_15_percent_band(self):
+        self.assertTrue(self.length_ok("400 words", 350))
+        self.assertFalse(self.length_ok("400 words", 300))
+        self.assertTrue(self.length_ok("300-400 words", 350))
+        self.assertFalse(self.length_ok("300-400 words", 250))
+        self.assertFalse(self.length_ok("within 300-400 words", 120))
+
+    def test_no_word_target_is_always_ok(self):
+        self.assertTrue(self.length_ok("one page", 5000))
+        self.assertTrue(self.length_ok("short", 5))
+
+    # -- finding 5: constraint regexes must not over-match ---------------------------------
+    def test_exactly_n_words_about_each_item_is_not_a_whole_draft_constraint(self):
+        req = "Write five headlines, each headline exactly 8 words, then a two paragraph summary."
+        self.assertEqual(self.failures(_words(200), req), [])
+
+    def test_at_least_n_points_without_the_word_bullet_is_not_a_bullet_constraint(self):
+        req = "Explain the plan and cover at least three points in the introduction."
+        self.assertEqual(self.failures(_words(80), req), [])
+
+    def test_numbered_list_items_count_toward_a_bullet_minimum(self):
+        req = "Include a bulleted list of at least four items."
+        content = _words(50) + "\n1. one\n2. two\n3. three\n4. four\n"
+        self.assertEqual(self.failures(content, req), [])
+
+    def test_bullet_word_forms_are_understood(self):
+        req = "Use at least three bullet points."
+        self.assertTrue(any("3" in f for f in self.failures(_words(50) + "\n- a\n", req)))
+
+    def test_todo_in_ordinary_prose_is_not_a_placeholder(self):
+        self.assertFalse(self.placeholder("Our todo app and the tbd column help teams plan."))
+
+    def test_real_placeholders_are_still_caught(self):
+        for text in ("TODO: fill in", "Pricing TBD", "[Insert name here]", "Dear [Name],", "lorem ipsum dolor", "XXX"):
+            with self.subTest(text=text):
+                self.assertTrue(self.placeholder(text), text)
+
+    def test_markdown_links_are_still_not_placeholders(self):
+        self.assertFalse(self.placeholder("See [Your HR portal](https://example.com/hr) and [Addendum]."))
+
+    # -- finding 6: research errors and unparseable intake replies -------------------------
+    def test_a_research_error_item_is_scrubbed_and_flagged(self):
+        nodes = {"Normalize Request": {"raw_request": "r", "run_id": "1", "round": 0, "issues": []},
+                 "IntakeAgent": {"output": {"brief": {}, "work_type": "draft_from_scratch"}},
+                 "ResearchAgent": {"error": "The service is receiving too many requests from you"}}
+        self.assertEqual(_evaluate(_assignment("Build Draft Input", "dossier"), {}, nodes), "")
+        self.assertTrue(_evaluate(_assignment("Build Draft Input", "research_failed"), {}, nodes))
+
+    def kind(self, error):
+        expr = _nodes()["Intake Reply Unparseable?"]["parameters"]["conditions"]["conditions"][0]["leftValue"]
+        return _evaluate(expr, {"error": error})
+
+    def test_only_unparseable_replies_are_treated_as_unclear_requests(self):
+        self.assertTrue(self.kind("Model output doesn't fit required format"))
+        self.assertTrue(self.kind("The AI model returned an empty response to the Structured Output Parser"))
+        self.assertFalse(self.kind("The service is receiving too many requests from you"))
+        self.assertFalse(self.kind("Invalid API key"))
+        self.assertFalse(self.kind(""))
+
+    # -- finding 3: ReviewAgent system message must match the gate -------------------------
+    def test_review_system_message_agrees_with_the_gate(self):
+        msg = _nodes()["ReviewAgent"]["parameters"]["messages"]["messageValues"][0]["message"]
+        self.assertIn("critical or high", msg)
+        self.assertNotIn("do NOT block approval", msg)
+        self.assertNotIn("even if non-critical issues remain", msg)
+        # output fields the Review Parser schema does not have
+        self.assertNotIn("requirements_check", msg)
+        self.assertNotIn("approved: boolean", msg)
+
+    # -- finding 7: long deliverables are split, never cut ---------------------------------
+    def parts(self, content):
+        nodes = _nodes()
+        stub = {"Compute Verdict": {"score": 90, "round": 1, "run_id": "9", "draft": {"content": content}}}
+        texts = [
+            _evaluate(nodes[n]["parameters"]["text"], {}, stub)
+            for n in ("Telegram Reply Delivered", "Telegram Reply Delivered 2", "Telegram Reply Delivered 3")
+        ]
+        gates = [
+            _evaluate(nodes[n]["parameters"]["conditions"]["conditions"][0]["leftValue"], {}, stub)
+            for n in ("More Text? (part 2)", "More Text? (part 3)")
+        ]
+        return texts, gates
+
+    def test_a_short_deliverable_is_one_message_with_nothing_lost(self):
+        content = "Body.\n\nThank you for your flexibility."
+        texts, gates = self.parts(content)
+        self.assertEqual(gates, [False, False])
+        self.assertTrue(texts[0].startswith("Approved"))
+        self.assertTrue(texts[0].endswith("Thank you for your flexibility."))
+
+    def test_a_long_deliverable_is_split_losslessly_within_telegram_limits(self):
+        content = ("word " * 1700) + "END."  # ~8500 chars
+        texts, gates = self.parts(content)
+        self.assertEqual(gates, [True, True])
+        self.assertTrue(all(len(t) <= 4096 for t in texts))
+        joined = "".join(t for t in texts)
+        self.assertTrue(joined.endswith("END."))
+        self.assertIn(content, joined)
+
+    def test_an_enormous_deliverable_gets_a_cut_notice_pointing_at_the_execution(self):
+        texts, gates = self.parts("word " * 5000)  # 25000 chars
+        self.assertTrue(all(len(t) <= 4096 for t in texts))
+        self.assertIn("execution 9", texts[2])
 
 
 if __name__ == "__main__":

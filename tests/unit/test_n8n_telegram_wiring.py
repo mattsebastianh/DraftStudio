@@ -63,22 +63,25 @@ class TelegramReplyTests(unittest.TestCase):
                 self.assertIn("chat_id", json.dumps(self.nodes[gate]["parameters"]))
 
     def test_send_nodes_are_plain_text_and_capped(self):
-        for name in ("Telegram Reply Delivered", "Telegram Reply Escalated"):
+        caps = {"Telegram Reply Delivered": "substring(0, 3900)", "Telegram Reply Escalated": "substring(0, 4000)"}
+        for name, cap in caps.items():
             with self.subTest(node=name):
                 node = self.nodes[name]
                 self.assertEqual(node["type"], "n8n-nodes-base.telegram")
                 params = node["parameters"]
                 self.assertEqual(params["operation"], "sendMessage")
                 self.assertIn("chat_id", params["chatId"])
-                self.assertIn("substring(0, 4000)", params["text"])
+                self.assertIn(cap, params["text"])
                 self.assertNotIn("parseMode", params.get("additionalFields", {}))
                 self.assertEqual(node["credentials"]["telegramApi"]["id"], "REPLACE_ME")
 
     def test_telegram_nodes_share_one_credential_name(self):
         names = {
             self.nodes[n]["credentials"]["telegramApi"]["name"]
-            for n in ("Telegram Trigger", "Telegram Reply Delivered", "Telegram Reply Escalated")
+            for n in self.nodes
+            if self.nodes[n]["type"].startswith("n8n-nodes-base.telegram")
         }
+        self.assertGreaterEqual(len([n for n in self.nodes if n.startswith("Telegram Reply")]), 6)
         self.assertEqual(names, {"DraftStudio Telegram"})
 
 
@@ -91,7 +94,10 @@ class IntakeFailureTests(unittest.TestCase):
     def test_intake_errors_route_to_clarification_not_a_crash(self):
         self.assertEqual(self.nodes["IntakeAgent"].get("onError"), "continueErrorOutput")
         self.assertEqual(_targets(self.conns, "IntakeAgent", 0), ["Needs Research?"])
-        self.assertEqual(_targets(self.conns, "IntakeAgent", 1), ["Respond Needs Clarification"])
+        self.assertEqual(_targets(self.conns, "IntakeAgent", 1), ["Intake Reply Unparseable?"])
+        # only an unparseable model reply is "unclear"; any other failure is a service error
+        self.assertEqual(_targets(self.conns, "Intake Reply Unparseable?", 0), ["Respond Needs Clarification"])
+        self.assertEqual(_targets(self.conns, "Intake Reply Unparseable?", 1), ["Respond Service Error"])
 
     def test_clarification_is_returned_to_webhook_and_telegram(self):
         self.assertEqual(
@@ -194,6 +200,58 @@ class ReviewerModelTests(unittest.TestCase):
     def test_old_review_model_nodes_are_gone(self):
         self.assertNotIn("Groq Review", self.nodes)
         self.assertNotIn("Groq Fallback Review", self.nodes)
+
+
+class TelegramSafetyTests(unittest.TestCase):
+    """Review findings 1 and 7: fail closed on who may use the bot; never cut a deliverable silently."""
+
+    def setUp(self):
+        self.nodes, self.conns = _load()
+
+    def test_trigger_is_restricted_to_a_chat_id_and_fails_closed(self):
+        ids = self.nodes["Telegram Trigger"]["parameters"]["additionalFields"].get("chatIds")
+        self.assertTrue(ids, "chatIds must be set so an unconfigured import rejects everyone")
+        self.assertIn("REPLACE", ids)  # the committed file holds a placeholder, never a real chat id
+
+    def test_long_deliverables_are_sent_in_up_to_three_parts(self):
+        self.assertEqual(_targets(self.conns, "Telegram Reply Delivered"), ["More Text? (part 2)"])
+        self.assertEqual(_targets(self.conns, "More Text? (part 2)", 0), ["Telegram Reply Delivered 2"])
+        self.assertEqual(_targets(self.conns, "More Text? (part 2)", 1), [])
+        self.assertEqual(_targets(self.conns, "Telegram Reply Delivered 2"), ["More Text? (part 3)"])
+        self.assertEqual(_targets(self.conns, "More Text? (part 3)", 0), ["Telegram Reply Delivered 3"])
+        self.assertEqual(_targets(self.conns, "More Text? (part 3)", 1), [])
+        for name in ("Telegram Reply Delivered 2", "Telegram Reply Delivered 3"):
+            self.assertEqual(self.nodes[name]["credentials"]["telegramApi"]["id"], "REPLACE_ME")
+
+
+class ErrorRoutingTests(unittest.TestCase):
+    """Review finding 6: an agent failure must produce a reply, and infra errors must not look like unclear requests."""
+
+    def setUp(self):
+        self.nodes, self.conns = _load()
+
+    def test_every_agent_has_an_error_output(self):
+        for agent in ("IntakeAgent", "ResearchAgent", "DraftAgent", "ReviewAgent", "DispatchAgent"):
+            with self.subTest(agent=agent):
+                self.assertEqual(self.nodes[agent].get("onError"), "continueErrorOutput")
+
+    def test_research_failure_degrades_instead_of_aborting(self):
+        self.assertEqual(_targets(self.conns, "ResearchAgent", 1), ["Build Draft Input"])
+
+    def test_draft_review_dispatch_failures_reach_the_service_error_reply(self):
+        for agent in ("DraftAgent", "ReviewAgent", "DispatchAgent"):
+            with self.subTest(agent=agent):
+                self.assertEqual(_targets(self.conns, agent, 1), ["Respond Service Error"])
+
+    def test_service_error_is_a_500_for_webhook_and_a_telegram_message(self):
+        respond = self.nodes["Respond Service Error"]["parameters"]
+        self.assertEqual(respond["options"]["responseCode"], 500)
+        self.assertIn("'error'", respond["responseBody"])
+        self.assertEqual(_targets(self.conns, "Respond Service Error"), ["Reply on Telegram? (error)"])
+        self.assertEqual(_targets(self.conns, "Reply on Telegram? (error)", 0), ["Telegram Reply Error"])
+        self.assertEqual(_targets(self.conns, "Reply on Telegram? (error)", 1), [])
+        text = self.nodes["Telegram Reply Error"]["parameters"]["text"]
+        self.assertNotIn("$json.error", text)  # never leak internal error text to a chat user
 
 
 if __name__ == "__main__":
