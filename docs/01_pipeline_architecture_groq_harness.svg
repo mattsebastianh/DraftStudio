@@ -63,8 +63,9 @@
     <text x="1280" y="358">package + hand off</text>
   </g>
 
-  <rect x="40" y="580" width="860" height="80" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="6 4" stroke-width="2"/>
-  <text x="60" y="608" font-size="14" font-weight="600" fill="#0f172a">Runtime — Groq (OpenAI-compatible API, keys from .env)</text>
-  <text x="60" y="632" font-size="12" fill="#475569">Primary: llama-3.3-70b-versatile   →   Fallback (daily token quota exhausted): openai/gpt-oss-120b</text>
-  <text x="60" y="650" font-size="12" fill="#475569">Every agent = system_prompt.txt + tools.json · wired by wires/*.yaml · registered in agents/registry.yaml</text>
+  <rect x="40" y="572" width="860" height="104" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="6 4" stroke-width="2"/>
+  <text x="60" y="598" font-size="14" font-weight="600" fill="#0f172a">Runtime — Groq primary, OpenRouter fallback (OpenAI-compatible APIs, keys from .env)</text>
+  <text x="60" y="620" font-size="12" fill="#475569">Primary: llama-3.3-70b-versatile   →   Fallback (daily token quota exhausted): openai/gpt-oss-120b</text>
+  <text x="60" y="638" font-size="12" fill="#475569">Groq unreachable or blocked (403, outage)   →   rest of the run on OpenRouter (OPENROUTER_PRIMARY_MODEL)</text>
+  <text x="60" y="658" font-size="12" fill="#475569">Every agent = system_prompt.txt + tools.json · wired by wires/*.yaml · registered in agents/registry.yaml</text>
 </svg>
