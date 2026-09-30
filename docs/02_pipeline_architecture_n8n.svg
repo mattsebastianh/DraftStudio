@@ -130,7 +130,7 @@
 <text x="1095.0" y="867.0" font-size="11" fill="#64748b" text-anchor="middle">generic error, run id</text>
 <path d="M950 855 H1010" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <rect x="40" y="910" width="2260" height="80" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="6 4" stroke-width="2"/>
-<text x="60" y="934" font-size="12" fill="#475569">Models: Groq openai/gpt-oss-120b (Intake, Research, Draft, Dispatch) with OpenRouter openai/gpt-oss-20b fallback · ReviewAgent: OpenRouter qwen/qwen3-235b-a22b-2507 with meta-llama/llama-3.3-70b-instruct fallback · retries 5 × 5 s per agent</text>
+<text x="60" y="934" font-size="12" fill="#475569">Models: Groq openai/gpt-oss-120b (Intake, Research, Draft, Dispatch) with OpenRouter openai/gpt-oss-20b fallback · ReviewAgent: OpenRouter qwen/qwen3-235b-a22b-2507 with Groq llama-3.3-70b-versatile fallback · retries 5 × 5 s per agent</text>
 <text x="60" y="955" font-size="12" fill="#475569">Checks and verdict use Edit Fields + IF expressions only (no Code node) · Structured Output Parser on Intake, Draft, Review, Dispatch · long Telegram deliverables are sent in up to 3 messages</text>
 <text x="60" y="976" font-size="12" fill="#dc2626">Before activating: set Webhook authentication and the Telegram chat-id allowlist. Live-tested on n8n 2.x (executions 370-380); the stricter gate and the failure branches are not yet run live.</text>
 </svg>

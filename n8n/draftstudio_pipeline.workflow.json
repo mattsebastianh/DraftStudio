@@ -35,7 +35,7 @@
     },
     {
       "parameters": {
-        "content": "## Models\n- **Primary:** `openai/gpt-oss-120b` on every `Groq <Agent>` Chat Model node.\n- **ReviewAgent is the exception:** its primary is `qwen/qwen3-235b-a22b-2507` on OpenRouter (`OpenRouter Review`, temperature 0.1), a different model family from the drafter and off Groq's token budget; its fallback is `meta-llama/llama-3.3-70b-instruct` on OpenRouter (`OpenRouter Fallback Review`), a third model family.\n- **Fallback:** `openai/gpt-oss-20b` on OpenRouter, on every `OpenRouter Fallback <Agent>` node, wired to the *Fallback Model* input (Enable Fallback Model = on). If the primary call fails (e.g. daily quota exhausted / 429), LangChain retries the same prompt on the fallback model.\n- Primary nodes use **DraftStudio Groq**, fallback nodes use **DraftStudio OpenRouter**, so a Groq rate limit does not also hit the fallback. To change a model, edit the Model field on the node; the IDs in `.env` are not read by n8n.",
+        "content": "## Models\n- **Primary:** `openai/gpt-oss-120b` on every `Groq <Agent>` Chat Model node.\n- **ReviewAgent is the exception:** its primary is `qwen/qwen3-235b-a22b-2507` on OpenRouter (`OpenRouter Review`, temperature 0.1), a different model family from the drafter and off Groq's token budget; its fallback is `llama-3.3-70b-versatile` on Groq (`Groq Fallback Review`), a different provider and a third model family.\n- **Fallback:** `openai/gpt-oss-20b` on OpenRouter, on every `OpenRouter Fallback <Agent>` node, wired to the *Fallback Model* input (Enable Fallback Model = on). If the primary call fails (e.g. daily quota exhausted / 429), LangChain retries the same prompt on the fallback model.\n- Every agent has two different providers: Groq primaries fall back to OpenRouter, and the OpenRouter reviewer falls back to Groq, so a regional Groq block or an OpenRouter outage never takes out an agent (primary nodes use **DraftStudio Groq** or **DraftStudio OpenRouter**, fallbacks the other). To change a model, edit the Model field on the node; the IDs in `.env` are not read by n8n.",
         "height": 380,
         "width": 520,
         "color": 3
@@ -1377,24 +1377,24 @@
     },
     {
       "parameters": {
-        "model": "meta-llama/llama-3.3-70b-instruct",
+        "model": "llama-3.3-70b-versatile",
         "options": {
-          "maxTokens": 4000,
+          "maxTokensToSample": 4000,
           "temperature": 0.1
         }
       },
       "id": "8f0208be-9bd2-5ca0-baa2-256cdf31d35a",
-      "name": "OpenRouter Fallback Review",
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "name": "Groq Fallback Review",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
         2340,
         520
       ],
       "credentials": {
-        "openRouterApi": {
+        "groqApi": {
           "id": "REPLACE_ME",
-          "name": "DraftStudio OpenRouter"
+          "name": "DraftStudio Groq"
         }
       }
     },
@@ -2132,17 +2132,6 @@
         ]
       ]
     },
-    "OpenRouter Fallback Review": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "ReviewAgent",
-            "type": "ai_languageModel",
-            "index": 1
-          }
-        ]
-      ]
-    },
     "Intake Reply Unparseable?": {
       "main": [
         [
@@ -2228,6 +2217,17 @@
           }
         ],
         []
+      ]
+    },
+    "Groq Fallback Review": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ReviewAgent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
       ]
     }
   },

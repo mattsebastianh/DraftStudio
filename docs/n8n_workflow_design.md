@@ -70,7 +70,7 @@ delete the **Tavily Search** node: ResearchAgent still works with Wikipedia.
 - [ ] **One webhook per bot.** Activating the trigger points the bot's Telegram webhook at this
   workflow (`WEBHOOK_URL` must be public HTTPS). Use a bot no other workflow uses, or that
   workflow stops receiving messages.
-- [ ] **OpenRouter credit.** The reviewer and every fallback run on OpenRouter; an empty balance
+- [ ] **OpenRouter credit.** The reviewer and every fallback except the reviewer's run on OpenRouter; an empty balance
   stops the review (section 5).
 
 ## 2. Triggers and responses
@@ -172,7 +172,7 @@ Escalated**. That allows the first draft plus up to 3 revisions, like the harnes
 | Intake | Groq `openai/gpt-oss-120b` (`Groq Intake`) | OpenRouter `openai/gpt-oss-20b` | 4000 |
 | Research | Groq `openai/gpt-oss-120b` | OpenRouter `openai/gpt-oss-20b` | 12000 |
 | Draft | Groq `openai/gpt-oss-120b` | OpenRouter `openai/gpt-oss-20b` | 12000 |
-| **Review** | **OpenRouter `qwen/qwen3-235b-a22b-2507`** (`OpenRouter Review`, temperature 0.1) | **OpenRouter `meta-llama/llama-3.3-70b-instruct`** (temperature 0.1) | 4000 |
+| **Review** | **OpenRouter `qwen/qwen3-235b-a22b-2507`** (`OpenRouter Review`, temperature 0.1) | **Groq `llama-3.3-70b-versatile`** (`Groq Fallback Review`, temperature 0.1) | 4000 |
 | Dispatch | Groq `openai/gpt-oss-120b` | OpenRouter `openai/gpt-oss-20b` | 3000 |
 
 Temperature is 0.3 except on the review nodes. Groq and fallback nodes size max tokens for
@@ -183,9 +183,11 @@ reasoning models, which spend part of the budget on hidden reasoning; the OpenRo
 favours its own style; a non-reasoning model spends no budget on hidden reasoning (the
 gpt-oss-20b fallback once returned an empty response, execution 378); and moving the review off
 Groq removes about 4000 tokens per round from Groq's per-minute budget (execution 377 hit the
-8000 TPM limit inside ReviewAgent). The fallback is a third family. Cost is about $0.001-0.002 per
-review at list prices. **Trade-off:** both review models are on OpenRouter, so an outage or empty
-balance there takes out the review and its fallback together.
+8000 TPM limit inside ReviewAgent). The fallback is a third family on a different provider. Cost is about $0.001-0.002 per
+review at list prices. **Two providers everywhere:** every agent has a primary and a fallback on
+different providers (Groq with an OpenRouter fallback, and the OpenRouter reviewer with a Groq
+fallback), so a regional Groq block (Groq can be unreachable from some regions) or an OpenRouter
+outage or empty balance cannot take out an agent by itself.
 
 **How fallback works.** Each chain/agent has *Enable Fallback Model* on (`needsFallback: true`) and
 its fallback node wired to the second model input (*Fallback Model*, `ai_languageModel` index 1).
@@ -197,7 +199,7 @@ same prompt on the fallback. This needs Basic LLM Chain 1.2 or 1.4+ (1.5 is used
 waiting, which covers a typical Groq "try again in ~8 s" 429.
 
 **`.env` is reference only.** n8n does not read it. `.env.example` lists `OPENROUTER_PRIMARY_MODEL`,
-`OPENROUTER_FALLBACK_MODEL`, `OPENROUTER_REVIEW_MODEL` and `OPENROUTER_REVIEW_FALLBACK_MODEL`
+`OPENROUTER_FALLBACK_MODEL` and `OPENROUTER_REVIEW_MODEL`
 for the Python harness and as a record; the workflow hard-codes the IDs on its nodes, so
 changing a variable changes nothing here. To change a model, edit the Model field on the node.
 
