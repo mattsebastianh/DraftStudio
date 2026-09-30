@@ -96,6 +96,10 @@ It routes the request through IntakeAgent → (ResearchAgent) → DraftAgent →
 
 The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies) and falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically (see `CLAUDE.md`) — no manual invocation needed.
 
+### The n8n workflow
+
+The same pipeline also exists as an importable n8n workflow, `n8n/draftstudio_pipeline.workflow.json`, triggered by a webhook, a manual test input or a Telegram bot, with a stricter quality gate than the harness (approval also requires no `high` issue and every stated request constraint met). Setup, security checklist, models and behaviour are in [docs/n8n_workflow_design.md](docs/n8n_workflow_design.md); check the file with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
+
 ## Repository Layout
 
 ```
@@ -105,6 +109,9 @@ wires/           ← Inter-agent communication contracts (YAML)
 specs/           ← Agent specs, written before scaffolding
 reviews/         ← Audit reports from /agent-review
 harness/         ← Live execution harness (run_pipeline.py)
+n8n/             ← Importable n8n workflow (JSON) and node verification notes
+scripts/         ← Tooling, e.g. the n8n workflow validator
+docs/            ← Handbook, n8n design doc, architecture diagrams (SVG), plans
 tests/           ← Pipeline test results; live run logs in tests/live_runs/
 handoffs/        ← Session export dumps from /context-dump
 deliverables/    ← Outputs produced by the pipeline
@@ -118,6 +125,8 @@ All 5 agents are built, reviewed, pipeline-tested, and **active**. The full wire
 
 **Live execution is verified.** Eight live end-to-end runs against the Groq API have completed (scores 85–94/100), including real client-style draft requests delivered through the full pipeline. The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. One known gap: the ReviewAgent → DraftAgent revision loop and 3-cycle escalation have never fired live — every run so far has been approved on round 0 (run history in `tests/live_runs/` and the Notion "Pipeline Tests" page).
 
+**n8n workflow:** imported into a local n8n 2.x and run live (Telegram in and out, the revision loop, a Groq 429 with model fallback). Unlike the harness, the revision loop has fired live there. The stricter gate, the failure branches and the OpenRouter reviewer fallback are built and unit-tested but not yet run live; see the status table in the design doc.
+
 Planned v2 work: priority handling at intake, `client_id` propagation, multi-channel delivery, and a trap brief that forces a sub-80 round-0 score to finally exercise the revision loop live.
 
 ## Design Principles
@@ -126,4 +135,4 @@ Planned v2 work: priority handling at intake, `client_id` propagation, multi-cha
 - **Small, focused agents** — each does substantive, distinct work; no mega-agents
 - **Explicit contracts** — every inter-agent message has a schema and a failure path
 - **Humans stay in the loop** — every agent has defined escalation rules
-- **Secrets stay in `.env`** — no keys, tokens, or model IDs hardcoded anywhere
+- **Secrets stay in `.env`** — no keys or tokens in any file. Model IDs live in `.env` too, with one exception: n8n does not read `.env`, so the workflow JSON hard-codes its model IDs on the nodes (the `OPENROUTER_*` variables in `.env` are reference values there; see the design doc)
