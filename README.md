@@ -26,12 +26,11 @@ All agents are built with [claude-code](https://claude.com/claude-code) and powe
 
 ## How Work Flows
 
-```
-Client → IntakeAgent → ResearchAgent → DraftAgent → ReviewAgent → DispatchAgent → Client
-                                   ↑         ↓ (revision, max 3 cycles)
-                                   └─────────┘
-                       (client revision request → back through IntakeAgent)
-```
+![DraftStudio agent pipeline architecture](docs/01_pipeline_architecture_groq_harness.svg)
+
+Research is optional: IntakeAgent routes straight to DraftAgent when the brief needs none, and DraftAgent or ReviewAgent can request more mid-flow (dashed). Red lines are the revision loop (score < 80, max 3 cycles) and human escalation. The n8n version of the same pipeline, with its Telegram entry and reply, error branches and stricter gate:
+
+![DraftStudio n8n workflow architecture](docs/02_pipeline_architecture_n8n.svg)
 
 The agents communicate over 9 verified **wires** — explicit contracts in `wires/` that define the trigger event, message schema, and failure handling for every hop. Key guarantees:
 
