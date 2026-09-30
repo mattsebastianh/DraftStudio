@@ -76,10 +76,9 @@
 <path d="M690 355 V225 H730" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
 <text x="640" y="300" font-size="12" fill="#475569">research</text>
 <path d="M850 260 V355" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
-<text x="856" y="312" font-size="12" fill="#475569">dossier</text>
+<text x="856" y="312" font-size="12" fill="#475569">dossier (none if research errors)</text>
 <path d="M740 141 V190" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
 <path d="M880 141 V190" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
-<text x="1020" y="110" font-size="11" fill="#ea580c">Research error → no dossier (continues)</text>
 <rect x="1755" y="500" width="120" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/>
 <text x="1815.0" y="521.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Rounds Left?</text>
 <text x="1815.0" y="537.0" font-size="11" fill="#64748b" text-anchor="middle">IF  round &lt; 3</text>
@@ -120,10 +119,9 @@
 <text x="855.0" y="867.0" font-size="11" fill="#64748b" text-anchor="middle">HTTP 500 · &#x27;error&#x27;</text>
 <path d="M610 585 H855 V830" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <text x="700" y="577" font-size="11" fill="#475569">no: service error</text>
-<path d="M1120 420 V790" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
-<path d="M1500 420 V790" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
-<path d="M2000 420 V790" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
-<path d="M2000 790 H855" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4"/>
+<path d="M1120 420 V790" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4"/>
+<path d="M1500 420 V790" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4"/>
+<path d="M2000 420 V790 H905 V830" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
 <text x="1150" y="782" font-size="11" fill="#ea580c">Draft / Review / Dispatch error output</text>
 <rect x="1010" y="830" width="170" height="50" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
 <text x="1095.0" y="851.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Telegram reply</text>
