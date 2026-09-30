@@ -294,7 +294,8 @@
       ],
       "retryOnFail": true,
       "maxTries": 5,
-      "waitBetweenTries": 5000
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -427,14 +428,14 @@
             {
               "id": "a52db5f8-1cbe-5ed5-be17-0cdbeb8161d0",
               "name": "dossier",
-              "value": "={{ (() => { if (!$('ResearchAgent').isExecuted) return ''; const o = $('ResearchAgent').first().json.output; return /stopped due to max iterations/i.test(typeof o === 'string' ? o : JSON.stringify(o)) ? '' : o; })() }}",
+              "value": "={{ (() => { if (!$('ResearchAgent').isExecuted) return ''; const o = $('ResearchAgent').first().json.output; if (o === undefined || o === null) return ''; return /stopped due to max iterations/i.test(typeof o === 'string' ? o : JSON.stringify(o)) ? '' : o; })() }}",
               "type": "string"
             },
             {
               "id": "33174caa-02f5-5985-aadd-c7a01c030aa8",
               "name": "research_failed",
               "type": "boolean",
-              "value": "={{ $('ResearchAgent').isExecuted && /stopped due to max iterations/i.test((() => { const o = $('ResearchAgent').first().json.output; return typeof o === 'string' ? o : JSON.stringify(o); })()) }}"
+              "value": "={{ $('ResearchAgent').isExecuted && (() => { const o = $('ResearchAgent').first().json.output; return o === undefined || o === null || /stopped due to max iterations/i.test(typeof o === 'string' ? o : JSON.stringify(o)); })() }}"
             },
             {
               "id": "036ccb18-e98e-5430-bcff-d4c890054c4f",
@@ -493,7 +494,8 @@
       ],
       "retryOnFail": true,
       "maxTries": 5,
-      "waitBetweenTries": 5000
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -605,20 +607,20 @@
             {
               "id": "8bcc2c0a-d2b0-567f-a9b3-13c3d53cef49",
               "name": "has_placeholder",
-              "value": "={{ /\\[(?:insert|add)\\b[^\\]]*\\](?!\\()|\\[(?:name|date|company name|todo|tbd|placeholder|your [^\\]]+)\\](?!\\()|\\bTODO\\b|\\bTBD\\b|\\bX{3,}\\b|lorem ipsum/i.test($json.output.draft.content || '') }}",
+              "value": "={{ /\\[(?:insert|add)\\b[^\\]]*\\](?!\\()|\\[(?:name|date|company name|todo|tbd|placeholder|your [^\\]]+)\\](?!\\()|lorem ipsum/i.test($json.output.draft.content || '') || /\\bTODO\\b|\\bTBD\\b|\\bX{3,}\\b/.test($json.output.draft.content || '') }}",
               "type": "boolean"
             },
             {
               "id": "19ae9b54-5fb9-57ed-b389-5feb70cbe34b",
               "name": "length_ok",
-              "value": "={{ (() => {\n  const len = String($('Build Draft Input').first().json.brief.length || '');\n  const nums = /word/i.test(len) ? (len.replace(/,/g, '').match(/\\d+/g) || []).map(Number) : [];\n  if (nums.length === 0) return true;\n  const wc = (($json.output.draft.content || '').trim().split(/\\s+/).filter(w => w.length > 0).length);\n  return wc >= Math.min.apply(null, nums) * 0.85 && wc <= Math.max.apply(null, nums) * 1.15;\n})() }}",
+              "value": "={{ (() => {\n  const len = String($('Build Draft Input').first().json.brief.length || '');\n  if (!/word/i.test(len)) return true;\n  const nums = (len.replace(/,/g, '').match(/\\d+/g) || []).map(Number);\n  if (nums.length === 0) return true;\n  const wc = (($json.output.draft.content || '').trim().split(/\\s+/).filter(w => w.length > 0).length);\n  const lo = Math.min.apply(null, nums);\n  const hi = Math.max.apply(null, nums);\n  if (nums.length === 1) {\n    const upper = /\\b(?:under|below|no more than|not more than|at most|maximum|max|up to|not exceed(?:ing)?|limit(?:ed)? to)\\b|(?<!\\b(?:no|not)\\s)\\b(?:less|fewer) than\\b/i.test(len);\n    const lower = /\\b(?:at least|minimum|min|no fewer than|no less than|not fewer than|not less than|greater than)\\b|(?<!\\b(?:no|not)\\s)\\b(?:more than|over)\\b/i.test(len);\n    if (upper && !lower) return wc <= hi;\n    if (lower && !upper) return wc >= lo;\n  }\n  return wc >= lo * 0.85 && wc <= hi * 1.15;\n})() }}",
               "type": "boolean"
             },
             {
               "id": "82e4e770-ff8c-5dce-a615-e8b04d8542c2",
               "name": "constraint_failures",
               "type": "array",
-              "value": "={{ (() => {\n  const req = String($('Build Draft Input').first().json.raw_request || '');\n  const content = String($json.output.draft.content || '');\n  const wc = content.trim().split(/\\s+/).filter(w => w.length > 0).length;\n  const out = [];\n  const numWords = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };\n  const toNum = s => { const k = String(s).toLowerCase().replace(/,/g, ''); return numWords[k] || parseInt(k, 10) || 0; };\n  const ending = req.match(/end(?:s|ing)?\\s+(?:with|on)\\s+the\\s+(?:sentence|phrase|line|words?)\\s*:?\\s*[\"“']([^\"”']+)[\"”']/i);\n  if (ending) {\n    const trim = s => s.trim().replace(/[\\s*_\"“”']+$/, '');\n    if (!trim(content).endsWith(trim(ending[1]))) out.push('The draft must end with the sentence \"' + ending[1].trim() + '\" and nothing after it.');\n  }\n  const exact = req.match(/exactly\\s+(\\d[\\d,]*)\\s+words?/i);\n  if (exact) {\n    const n = parseInt(exact[1].replace(/,/g, ''), 10);\n    if (Math.abs(wc - n) > Math.max(5, n * 0.05)) out.push('The request asks for exactly ' + n + ' words; the draft has ' + wc + ' (allowed ' + Math.round(n * 0.95) + '-' + Math.round(n * 1.05) + ').');\n  }\n  const bul = req.match(/(?:bulleted\\s+list\\s+of\\s+at\\s+least|at\\s+least)\\s+(\\w+)\\s+(?:bullet(?:ed)?\\s+)?(?:items?|points?|bullets?)/i);\n  if (bul) {\n    const n = toNum(bul[1]);\n    const have = (content.match(/^\\s*[-*•]\\s+\\S/gm) || []).length;\n    if (n > 0 && have < n) out.push('The request asks for at least ' + n + ' bullet items; the draft has ' + have + '.');\n  }\n  return out;\n})() }}"
+              "value": "={{ (() => {\n  const req = String($('Build Draft Input').first().json.raw_request || '');\n  const content = String($json.output.draft.content || '');\n  const wc = content.trim().split(/\\s+/).filter(w => w.length > 0).length;\n  const out = [];\n  const numWords = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };\n  const toNum = s => { const k = String(s).toLowerCase().replace(/,/g, ''); return numWords[k] || parseInt(k, 10) || 0; };\n  const ending = req.match(/end(?:s|ing)?\\s+(?:with|on)\\s+the\\s+(?:sentence|phrase|line|words?)\\s*:?\\s*(?:\"([^\"]+)\"|“([^”]+)”|'([^']+)')/i);\n  const target = ending ? (ending[1] || ending[2] || ending[3]) : '';\n  if (target) {\n    const trim = s => s.trim().replace(/[\\s*_\"“”']+$/, '');\n    if (!trim(content).endsWith(trim(target))) out.push('The draft must end with the sentence \"' + target.trim() + '\" and nothing after it.');\n  }\n  const exact = /exactly\\s+(\\d[\\d,]*)\\s+words?/i.exec(req);\n  if (exact && !/\\b(?:each|every|per)\\b[^.;\\n]{0,60}$/i.test(req.slice(0, exact.index))) {\n    const n = parseInt(exact[1].replace(/,/g, ''), 10);\n    if (Math.abs(wc - n) > Math.max(5, n * 0.05)) out.push('The request asks for exactly ' + n + ' words; the draft has ' + wc + ' (allowed ' + Math.round(n * 0.95) + '-' + Math.round(n * 1.05) + ').');\n  }\n  const bul = req.match(/bullet(?:ed)?\\s+list\\s+of\\s+at\\s+least\\s+(\\w+)/i) || req.match(/at\\s+least\\s+(\\w+)\\s+bullet(?:ed)?/i);\n  if (bul) {\n    const n = toNum(bul[1]);\n    const have = (content.match(/^\\s*(?:[-*•]|\\d+[.)])\\s+\\S/gm) || []).length;\n    if (n > 0 && have < n) out.push('The request asks for at least ' + n + ' bullet items; the draft has ' + have + '.');\n  }\n  return out;\n})() }}"
             }
           ]
         },
@@ -644,7 +646,7 @@
           "messageValues": [
             {
               "type": "SystemMessagePromptTemplate",
-              "message": "You are ReviewAgent, the agency's quality director. Your job is to evaluate deliverables against brief requirements and quality standards before they reach the client.\n\nGOAL: Ensure every deliverable meets all stated requirements, is factually grounded, and passes quality thresholds. Never let substandard work through.\n\nWORKFLOW:\n1. Use check_requirements to verify the draft against every brief requirement (pass/fail each)\n2. Use assess_quality to score on clarity, accuracy, completeness, and tone alignment\n3. Use flag_issues to identify and categorize problems with severity and suggested fixes\n\nOUTPUT FORMAT — always return a review with:\n- status: \"approved\" or \"revision_required\"\n- score: composite quality score 0-100\n- dimension_scores: per-dimension scores 0-100 for clarity, accuracy, completeness, tone_alignment — the composite score must be consistent with these\n- requirements_check: per-requirement pass/fail results\n- issues: categorized problems with severity and suggested fixes\n- approved: boolean — whether deliverable passes the quality gate\n\nDECISION RULE — status and approved MUST follow directly from the gate:\n- approved = true and status = \"approved\" if and only if score >= 80 AND there are no critical-severity issues\n- Otherwise approved = false and status = \"revision_required\"\n- Non-critical issues (high/medium/low) do NOT block approval on their own; list them as issues but keep status consistent with the rule above\n\nHARD RULES:\n- If score >= 80 and no issue has critical severity, you MUST set status \"approved\" and approved true — even if non-critical issues remain. Listing minor issues while approving is correct behavior, not a contradiction.\n- Check every requirement, not just a sample\n- Assign severity to every issue (critical, high, medium, low)\n- Include a suggested fix for every issue\n- Never approve a deliverable with critical issues\n- Never approve a deliverable with a quality score below 80\n- Never allow more than 3 revision cycles — if revision_round >= 3, escalate to human instead of sending back to DraftAgent\n- Never skip requirements check even if quality score is high\n\nESCALATE TO HUMAN WHEN:\n- revision_round >= 3 — do not send back to DraftAgent, escalate immediately\n- Quality is borderline (65-75) after all requirements pass\n\nESCALATE TO ResearchAgent WHEN:\n- Factual accuracy cannot be verified from available information"
+              "message": "You are ReviewAgent, the agency's quality director. Your job is to evaluate deliverables against brief requirements and quality standards before they reach the client.\n\nGOAL: Ensure every deliverable meets all stated requirements, is factually grounded, and passes quality thresholds. Never let substandard work through.\n\nWORKFLOW:\n1. Use check_requirements to verify the draft against every brief requirement (pass/fail each)\n2. Use assess_quality to score on clarity, accuracy, completeness, and tone alignment\n3. Use flag_issues to identify and categorize problems with severity and suggested fixes\n\nOUTPUT FORMAT — always return a review with:\n- status: \"approved\" or \"revision_required\"\n- score: composite quality score 0-100\n- dimension_scores: per-dimension scores 0-100 for clarity, accuracy, completeness, tone_alignment — the composite score must be consistent with these\n- requirements: per-requirement pass/fail results (requirement + passed)\n- issues: categorized problems with severity and suggested fixes\n\nDECISION RULE — status MUST follow directly from the gate:\n- status = \"approved\" if and only if score >= 80 AND there are no critical or high severity issues\n- Otherwise status = \"revision_required\"\n- Medium and low issues do not block approval on their own; list them as issues but keep status consistent with the rule above\n\nHARD RULES:\n- If score >= 80 and no issue has critical or high severity, you MUST set status \"approved\" — medium and low issues may remain. Listing minor issues while approving is correct behavior, not a contradiction.\n- Flag as high any specific claim (statistic, study, date, contact detail, quote) that is not in the brief or the research dossier\n- Check every requirement, not just a sample\n- Assign severity to every issue (critical, high, medium, low)\n- Include a suggested fix for every issue\n- Never approve a deliverable with critical or high issues\n- Never approve a deliverable with a quality score below 80\n- Never allow more than 3 revision cycles — if revision_round >= 3, escalate to human instead of sending back to DraftAgent\n- Never skip requirements check even if quality score is high\n\nESCALATE TO HUMAN WHEN:\n- revision_round >= 3 — do not send back to DraftAgent, escalate immediately\n- Quality is borderline (65-75) after all requirements pass\n\nESCALATE TO ResearchAgent WHEN:\n- Factual accuracy cannot be verified from available information"
             }
           ]
         }
@@ -659,7 +661,8 @@
       ],
       "retryOnFail": true,
       "maxTries": 5,
-      "waitBetweenTries": 5000
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -761,7 +764,7 @@
             {
               "id": "be8f3edb-0c24-560c-8c21-636bc91ea6c1",
               "name": "issues",
-              "value": "={{ ($json.output.issues || []).concat(\n  $('Deterministic Checks').last().json.has_placeholder ? [ { severity: 'critical', description: 'Placeholder text detected in the draft (e.g. [Insert ...], TODO, TBD, lorem ipsum).', suggested_fix: 'Replace every placeholder with real content or remove it.' } ] : [],\n  $('Deterministic Checks').last().json.length_ok ? [] : [ { severity: 'high', description: 'Measured word count ' + $('Deterministic Checks').last().json.word_count + ' is outside 15% of the brief length (' + $('Deterministic Checks').last().json.brief.length + ').', suggested_fix: 'Expand or trim the draft to the requested length.' } ],\n  ($('Deterministic Checks').last().json.constraint_failures || []).map(f => ({ severity: 'critical', description: f, suggested_fix: 'Revise the draft so that it satisfies this: ' + f }))\n) }}",
+              "value": "={{ ($json.output.issues || []).concat(\n  $('Deterministic Checks').last().json.has_placeholder ? [ { severity: 'critical', description: 'Placeholder text detected in the draft (e.g. [Insert ...], TODO, TBD, lorem ipsum).', suggested_fix: 'Replace every placeholder with real content or remove it.' } ] : [],\n  $('Deterministic Checks').last().json.length_ok ? [] : [ { severity: 'high', description: 'Measured word count ' + $('Deterministic Checks').last().json.word_count + ' does not meet the requested length (' + $('Deterministic Checks').last().json.brief.length + ').', suggested_fix: 'Expand or trim the draft to the requested length.' } ],\n  ($('Deterministic Checks').last().json.constraint_failures || []).map(f => ({ severity: 'critical', description: f, suggested_fix: 'Revise the draft so that it satisfies this: ' + f }))\n) }}",
               "type": "array"
             },
             {
@@ -844,7 +847,8 @@
       ],
       "retryOnFail": true,
       "maxTries": 5,
-      "waitBetweenTries": 5000
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -1058,7 +1062,9 @@
         "updates": [
           "message"
         ],
-        "additionalFields": {}
+        "additionalFields": {
+          "chatIds": "REPLACE_WITH_YOUR_CHAT_ID"
+        }
       },
       "id": "fe200862-f087-5883-a68a-abec4cf3b606",
       "name": "Telegram Trigger",
@@ -1182,7 +1188,7 @@
         "resource": "message",
         "operation": "sendMessage",
         "chatId": "={{ $('Normalize Request').last().json.chat_id }}",
-        "text": "={{ ('Approved · score ' + $('Compute Verdict').last().json.score + ' · ' + $('Compute Verdict').last().json.round + ' revision(s)\\n\\n' + $('Compute Verdict').last().json.draft.content).substring(0, 4000) }}",
+        "text": "={{ ('Approved · score ' + $('Compute Verdict').last().json.score + ' · ' + $('Compute Verdict').last().json.round + ' revision(s)\\n\\n' + $('Compute Verdict').last().json.draft.content).substring(0, 3900) }}",
         "additionalFields": {
           "appendAttribution": false
         }
@@ -1384,6 +1390,238 @@
           "name": "DraftStudio OpenRouter"
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "03cda3bd-d6a2-5d3f-be6a-d3202d0443ce",
+              "leftValue": "={{ /doesn't fit required format|empty response|Invalid JSON|Failed to parse|Could not parse/i.test(String($json.error || '')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f3e60a10-b750-59b4-a56e-9ac780d2691f",
+      "name": "Intake Reply Unparseable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        740,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', run_id: $('Normalize Request').last().json.run_id, message: 'The pipeline failed before it could produce a result. Please try again in a few minutes.' }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "57174517-49f3-5a27-b7bb-38bec8d1be20",
+      "name": "Respond Service Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        1160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b9668c84-4cb6-5827-bd4b-a6b2dcea083f",
+              "leftValue": "={{ $('Normalize Request').last().json.chat_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "71944aa6-067d-5772-8db4-aefc371bbbc6",
+      "name": "Reply on Telegram? (error)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1180,
+        1160
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Normalize Request').last().json.chat_id }}",
+        "text": "={{ 'Something went wrong while processing your request (run ' + $('Normalize Request').last().json.run_id + '). Please try again in a few minutes.' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "30d57b5b-5872-530c-b806-217eb08c26b0",
+      "name": "Telegram Reply Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1400,
+        1160
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Telegram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a50c9551-3c38-5194-8c02-e3d0029a7693",
+              "leftValue": "={{ ('Approved · score ' + $('Compute Verdict').last().json.score + ' · ' + $('Compute Verdict').last().json.round + ' revision(s)\\n\\n' + $('Compute Verdict').last().json.draft.content).length > 3900 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "6ce5bf00-70aa-5bbb-b87c-5d94643dfb96",
+      "name": "More Text? (part 2)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3780,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Normalize Request').last().json.chat_id }}",
+        "text": "={{ ('Approved · score ' + $('Compute Verdict').last().json.score + ' · ' + $('Compute Verdict').last().json.round + ' revision(s)\\n\\n' + $('Compute Verdict').last().json.draft.content).substring(3900, 7800) }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "18078eab-7466-560c-9cb1-846ce9d49084",
+      "name": "Telegram Reply Delivered 2",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4000,
+        -120
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Telegram"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "656c3ca3-1522-5f98-bbef-47881841cc56",
+              "leftValue": "={{ ('Approved · score ' + $('Compute Verdict').last().json.score + ' · ' + $('Compute Verdict').last().json.round + ' revision(s)\\n\\n' + $('Compute Verdict').last().json.draft.content).length > 7800 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "19d45d1b-c19f-5fa5-9269-cb19db4b6e16",
+      "name": "More Text? (part 3)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4220,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Normalize Request').last().json.chat_id }}",
+        "text": "={{ ('Approved · score ' + $('Compute Verdict').last().json.score + ' · ' + $('Compute Verdict').last().json.round + ' revision(s)\\n\\n' + $('Compute Verdict').last().json.draft.content).substring(7800, 11700) + (('Approved · score ' + $('Compute Verdict').last().json.score + ' · ' + $('Compute Verdict').last().json.round + ' revision(s)\\n\\n' + $('Compute Verdict').last().json.draft.content).length > 11700 ? '\\n\\n[Message cut: the deliverable is longer than 11,700 characters. The full text is in n8n execution ' + $('Compute Verdict').last().json.run_id + '.]' : '') }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "78762c4e-aaf3-5c01-849f-8fc0f1072c93",
+      "name": "Telegram Reply Delivered 3",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4440,
+        -120
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Telegram"
+        }
+      }
     }
   ],
   "connections": {
@@ -1442,7 +1680,7 @@
         ],
         [
           {
-            "node": "Respond Needs Clarification",
+            "node": "Intake Reply Unparseable?",
             "type": "main",
             "index": 0
           }
@@ -1475,6 +1713,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Build Draft Input",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1497,6 +1742,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Respond Service Error",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1516,6 +1768,13 @@
         [
           {
             "node": "Compute Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Service Error",
             "type": "main",
             "index": 0
           }
@@ -1556,6 +1815,13 @@
         [
           {
             "node": "Respond Delivered",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Service Error",
             "type": "main",
             "index": 0
           }
@@ -1868,6 +2134,93 @@
             "index": 1
           }
         ]
+      ]
+    },
+    "Intake Reply Unparseable?": {
+      "main": [
+        [
+          {
+            "node": "Respond Needs Clarification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Service Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Service Error": {
+      "main": [
+        [
+          {
+            "node": "Reply on Telegram? (error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply on Telegram? (error)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reply Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Telegram Reply Delivered": {
+      "main": [
+        [
+          {
+            "node": "More Text? (part 2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Text? (part 2)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reply Delivered 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Telegram Reply Delivered 2": {
+      "main": [
+        [
+          {
+            "node": "More Text? (part 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More Text? (part 3)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reply Delivered 3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },
