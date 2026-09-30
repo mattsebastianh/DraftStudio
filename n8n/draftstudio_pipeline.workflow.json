@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node (the five drafting/intake/research/dispatch primaries).\n2. **OpenRouter** credential (type *OpenRouter*) named **DraftStudio OpenRouter**: paste your OpenRouter API key. Used by every `OpenRouter Fallback *` model node.\n3. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disconnect Tavily Search; ResearchAgent still has Wikipedia.\n4. **Before activating:** set **Authentication** on the *Webhook* node (Header Auth, Basic Auth or JWT). It is *None* by default, so anyone with the URL could run the pipeline on your Groq/Tavily quota.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
+        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node (the five drafting/intake/research/dispatch primaries).\n2. **OpenRouter** credential (type *OpenRouter*) named **DraftStudio OpenRouter**: paste your OpenRouter API key. Used by every `OpenRouter Fallback *` model node.\n3. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disconnect Tavily Search; ResearchAgent still has Wikipedia.\n4. **Header Auth** credential named **DraftStudio Webhook**: header name `X-API-Key`, value a long random secret. The *Webhook* node requires it, so callers must send that header. Do not switch it to *None*: anyone with the URL could run the pipeline on your Groq/Tavily quota.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
         "height": 380,
         "width": 520,
         "color": 5
@@ -54,7 +54,8 @@
         "httpMethod": "POST",
         "path": "draftstudio",
         "responseMode": "responseNode",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
       },
       "id": "75d3eb80-1823-51bd-b7e4-b7c9c070ea43",
       "name": "Webhook",
@@ -64,7 +65,13 @@
         220,
         200
       ],
-      "webhookId": "b8177b38-9712-5a15-ac65-c96456600680"
+      "webhookId": "b8177b38-9712-5a15-ac65-c96456600680",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "DraftStudio Webhook"
+        }
+      }
     },
     {
       "parameters": {},
