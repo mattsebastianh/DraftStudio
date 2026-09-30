@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2340" height="1010" viewBox="0 0 2340 1010" font-family="Inter, Helvetica, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker><marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#dc2626"/></marker><marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ea580c"/></marker></defs>
+<rect width="2340" height="1010" fill="#f8fafc"/>
+<text x="40" y="46" font-size="24" fill="#0f172a" font-weight="700">DraftStudio — n8n Workflow Architecture</text>
+<text x="40" y="70" font-size="13" fill="#64748b">Built-in n8n nodes only · solid = data flow · dashed = tool or optional · red = revision loop and escalation · orange = agent error output · blue = Telegram</text>
+<text x="40" y="90" font-size="13" fill="#64748b">Approve at score ≥ 80 with no critical or high issue, no placeholder, length ok and every stated constraint met · max 3 revision cycles</text>
+<rect x="40" y="300" width="150" height="40" rx="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
+<text x="115.0" y="316.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Webhook</text>
+<text x="115.0" y="332.0" font-size="11" fill="#64748b" text-anchor="middle">POST /draftstudio</text>
+<rect x="40" y="360" width="150" height="40" rx="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
+<text x="115.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Manual Trigger</text>
+<text x="115.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">→ Test Input</text>
+<rect x="40" y="420" width="150" height="50" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+<text x="115.0" y="441.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Telegram Trigger</text>
+<text x="115.0" y="457.0" font-size="11" fill="#64748b" text-anchor="middle">allowlist → text filter</text>
+<path d="M190 320 H220 V370 H250" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<path d="M190 380 H250" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<path d="M190 445 H220 V390 H250" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="250" y="355" width="130" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+<text x="315.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Normalize Request</text>
+<text x="315.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields · chat_id</text>
+<path d="M380 380 H420" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="420" y="340" width="160" height="80" rx="12" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+<text x="500.0" y="378.0" font-size="14" fill="#1e3a8a" font-weight="600" text-anchor="middle">IntakeAgent</text>
+<text x="500.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<path d="M580 380 H630" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="630" y="355" width="120" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/>
+<text x="690.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Needs Research?</text>
+<text x="690.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">IF</text>
+<path d="M750 380 H800" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="800" y="355" width="120" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+<text x="860.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Build Draft Input</text>
+<text x="860.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields</text>
+<path d="M920 380 H970" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="970" y="340" width="160" height="80" rx="12" fill="#fef9c3" stroke="#eab308" stroke-width="2"/>
+<text x="1050.0" y="378.0" font-size="14" fill="#713f12" font-weight="600" text-anchor="middle">DraftAgent</text>
+<text x="1050.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<path d="M1130 380 H1180" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="1180" y="355" width="140" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+<text x="1250.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Deterministic Checks</text>
+<text x="1250.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields · constraints</text>
+<path d="M1320 380 H1370" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="1370" y="340" width="170" height="80" rx="12" fill="#fae8ff" stroke="#c026d3" stroke-width="2"/>
+<text x="1455.0" y="378.0" font-size="14" fill="#701a75" font-weight="600" text-anchor="middle">ReviewAgent</text>
+<text x="1455.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<path d="M1540 380 H1590" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="1590" y="355" width="120" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+<text x="1650.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Compute Verdict</text>
+<text x="1650.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields</text>
+<path d="M1710 380 H1760" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="1760" y="355" width="110" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/>
+<text x="1815.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Approved?</text>
+<text x="1815.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">IF</text>
+<path d="M1870 380 H1920" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<text x="1895" y="372" font-size="10" fill="#475569" text-anchor="middle">yes</text>
+<rect x="1920" y="340" width="160" height="80" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="2"/>
+<text x="2000.0" y="378.0" font-size="14" fill="#7c2d12" font-weight="600" text-anchor="middle">DispatchAgent</text>
+<text x="2000.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<path d="M2080 380 H2130" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="2130" y="355" width="150" height="50" rx="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
+<text x="2205.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Respond Delivered</text>
+<text x="2205.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Respond to Webhook</text>
+<rect x="2130" y="455" width="150" height="50" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+<text x="2205.0" y="476.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Telegram reply</text>
+<text x="2205.0" y="492.0" font-size="11" fill="#64748b" text-anchor="middle">1 to 3 messages, if chat_id</text>
+<path d="M2205 405 V455" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="730" y="190" width="160" height="70" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+<text x="810.0" y="223.0" font-size="14" fill="#14532d" font-weight="600" text-anchor="middle">ResearchAgent</text>
+<text x="810.0" y="240.0" font-size="11" fill="#64748b" text-anchor="middle">AI Agent</text>
+<rect x="690" y="105" width="100" height="36" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+<text x="740.0" y="119.0" font-size="12" fill="#14532d" font-weight="600" text-anchor="middle">Wikipedia</text>
+<text x="740.0" y="135.0" font-size="11" fill="#64748b" text-anchor="middle">tool</text>
+<rect x="830" y="105" width="100" height="36" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+<text x="880.0" y="119.0" font-size="12" fill="#14532d" font-weight="600" text-anchor="middle">Tavily Search</text>
+<text x="880.0" y="135.0" font-size="11" fill="#64748b" text-anchor="middle">tool (off in dev)</text>
+<path d="M690 355 V225 H730" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="640" y="300" font-size="12" fill="#475569">research</text>
+<path d="M850 260 V355" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="856" y="312" font-size="12" fill="#475569">dossier</text>
+<path d="M740 141 V190" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<path d="M880 141 V190" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="1020" y="110" font-size="11" fill="#ea580c">Research error → no dossier (continues)</text>
+<rect x="1755" y="500" width="120" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/>
+<text x="1815.0" y="521.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Rounds Left?</text>
+<text x="1815.0" y="537.0" font-size="11" fill="#64748b" text-anchor="middle">IF  round &lt; 3</text>
+<path d="M1815 405 V500" fill="none" stroke="#dc2626" stroke-width="2" marker-end="url(#r)"/>
+<text x="1823" y="455" font-size="12" fill="#dc2626">not approved</text>
+<rect x="1340" y="500" width="140" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+<text x="1410.0" y="521.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Prepare Revision</text>
+<text x="1410.0" y="537.0" font-size="11" fill="#64748b" text-anchor="middle">round + 1</text>
+<path d="M1755 525 H1480" fill="none" stroke="#dc2626" stroke-width="2" marker-end="url(#r)"/>
+<text x="1617" y="517" font-size="12" fill="#dc2626" text-anchor="middle">yes: next cycle</text>
+<path d="M1340 525 H1050 V420" fill="none" stroke="#dc2626" stroke-width="2" marker-end="url(#r)"/>
+<text x="1195" y="517" font-size="12" fill="#dc2626" text-anchor="middle">revision + issues</text>
+<rect x="1735" y="640" width="160" height="60" rx="12" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+<text x="1815.0" y="668.0" font-size="14" fill="#7f1d1d" font-weight="600" text-anchor="middle">Respond Escalated</text>
+<text x="1815.0" y="685.0" font-size="11" fill="#64748b" text-anchor="middle">needs a human</text>
+<path d="M1815 550 V640" fill="none" stroke="#dc2626" stroke-width="2" marker-end="url(#r)"/>
+<text x="1823" y="605" font-size="12" fill="#dc2626">round 3 fails</text>
+<rect x="1735" y="730" width="160" height="50" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+<text x="1815.0" y="751.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Telegram reply</text>
+<text x="1815.0" y="767.0" font-size="11" fill="#64748b" text-anchor="middle">score + top issues</text>
+<path d="M1815 700 V730" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="400" y="560" width="210" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/>
+<text x="505.0" y="581.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Intake Reply Unparseable?</text>
+<text x="505.0" y="597.0" font-size="11" fill="#64748b" text-anchor="middle">IF on the error text</text>
+<path d="M505 420 V560" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
+<text x="513" y="500" font-size="11" fill="#ea580c">error output</text>
+<rect x="340" y="690" width="200" height="50" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="2"/>
+<text x="440.0" y="711.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Respond Needs Clarification</text>
+<text x="440.0" y="727.0" font-size="11" fill="#64748b" text-anchor="middle">asks for topic, audience, tone, length</text>
+<path d="M455 610 V690" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<text x="462" y="655" font-size="11" fill="#475569">yes: unclear</text>
+<rect x="590" y="690" width="150" height="50" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+<text x="665.0" y="711.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Telegram reply</text>
+<text x="665.0" y="727.0" font-size="11" fill="#64748b" text-anchor="middle">clarification</text>
+<path d="M540 715 H590" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="760" y="830" width="190" height="50" rx="12" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+<text x="855.0" y="851.0" font-size="12" fill="#7f1d1d" font-weight="600" text-anchor="middle">Respond Service Error</text>
+<text x="855.0" y="867.0" font-size="11" fill="#64748b" text-anchor="middle">HTTP 500 · &#x27;error&#x27;</text>
+<path d="M610 585 H855 V830" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<text x="700" y="577" font-size="11" fill="#475569">no: service error</text>
+<path d="M1120 420 V790" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
+<path d="M1500 420 V790" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
+<path d="M2000 420 V790" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
+<path d="M2000 790 H855" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="1150" y="782" font-size="11" fill="#ea580c">Draft / Review / Dispatch error output</text>
+<rect x="1010" y="830" width="170" height="50" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+<text x="1095.0" y="851.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Telegram reply</text>
+<text x="1095.0" y="867.0" font-size="11" fill="#64748b" text-anchor="middle">generic error, run id</text>
+<path d="M950 855 H1010" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="40" y="910" width="2260" height="80" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="6 4" stroke-width="2"/>
+<text x="60" y="934" font-size="12" fill="#475569">Models: Groq openai/gpt-oss-120b (Intake, Research, Draft, Dispatch) with OpenRouter openai/gpt-oss-20b fallback · ReviewAgent: OpenRouter qwen/qwen3-235b-a22b-2507 with meta-llama/llama-3.3-70b-instruct fallback · retries 5 × 5 s per agent</text>
+<text x="60" y="955" font-size="12" fill="#475569">Checks and verdict use Edit Fields + IF expressions only (no Code node) · Structured Output Parser on Intake, Draft, Review, Dispatch · long Telegram deliverables are sent in up to 3 messages</text>
+<text x="60" y="976" font-size="12" fill="#dc2626">Before activating: set Webhook authentication and the Telegram chat-id allowlist. Live-tested on n8n 2.x (executions 370-380); the stricter gate and the failure branches are not yet run live.</text>
+</svg>

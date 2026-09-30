@@ -2,6 +2,10 @@
 
 A practical guide to operating the DraftStudio pipeline, from setup to reading the results, with a real worked example. For architecture and design principles, see [README.md](../README.md); this document is about *running* the studio day to day.
 
+> **Two ways to run the pipeline.** This handbook covers the Python harness (sections 1-8). The same pipeline as an n8n workflow (webhook, Telegram, stricter quality gate) is documented in [n8n_workflow_design.md](n8n_workflow_design.md).
+
+**Contents:** [1. One-time setup](#1-one-time-setup) · [2. Two ways to run](#2-two-ways-to-run-the-pipeline) · [3. Worked example](#3-worked-example--vacation-policy-memo) · [4. Reading the outputs](#4-reading-the-outputs) · [5. Rate limits and failures](#5-rate-limits-fallback-and-failure-handling) · [6. Crafting requests](#6-crafting-good-requests) · [7. Modifying the studio](#7-modifying-the-studio-itself) · [8. Troubleshooting](#8-troubleshooting)
+
 ---
 
 ## 1. One-Time Setup
@@ -19,9 +23,9 @@ curl -s -o /dev/null -w "%{http_code}\n" "$GROQ_BASE_URL/models" -H "Authorizati
 # expect: 200
 ```
 
-Models are configured in `.env` only — nothing else references model IDs:
+Models for the harness are configured in `.env` only (the n8n workflow hard-codes its own, see the n8n design doc). Values below are the defaults in `.env.example`; your `.env` may override them:
 
-| Variable | Current value | Role |
+| Variable | Default | Role |
 |----------|--------------|------|
 | `GROQ_PRIMARY_MODEL` | `llama-3.3-70b-versatile` | Every agent call, by default |
 | `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-120b` | Taken over automatically if the primary hits its daily token quota |
@@ -55,6 +59,10 @@ Two operational rules, learned the hard way:
                                                                   ▲              │
                                                                   └── revision ──┘  (max 3 cycles, then human escalation)
 ```
+
+Full diagram of this pipeline: [01_pipeline_architecture_groq_harness.svg](01_pipeline_architecture_groq_harness.svg). The same pipeline as an importable n8n workflow is drawn in [02_pipeline_architecture_n8n.svg](02_pipeline_architecture_n8n.svg) and documented in [n8n_workflow_design.md](n8n_workflow_design.md).
+
+Diagram files in `docs/` are named `NN_<subject>_<diagram-type>_<variant>.svg`: `NN` is the reading order, and the variant says which implementation is drawn (not which came later).
 
 The single command-line argument is the entire client request. Put **everything** in it — constraints, tone, audience, format, hard limits — because IntakeAgent parses that one string into the structured brief every downstream agent works from. ResearchAgent only runs if IntakeAgent sets `needs_research: true`.
 
@@ -132,7 +140,7 @@ From the live-test history (`tests/live_runs/`, Notion "Pipeline Tests"):
 
 - **Be exhaustive in the one argument.** Anything not in the request string doesn't exist for the agents.
 - **State format structurally** ("a 5-row table with columns X, Y, Z", "exactly 3 FAQ entries") — DraftAgent follows structure well.
-- **Avoid "exactly N words".** Reasoning models can burn their whole token budget counting words and return nothing. Ranges or caps ("must not exceed 380 words") work fine.
+- **Avoid "exactly N words".** Reasoning models can burn their whole token budget counting words and return nothing. Ranges or caps ("must not exceed 380 words") work fine. (The n8n workflow does check "exactly N words", allowing ±5%, and a required closing sentence; the harness does not.)
 - **Don't expect word-count violations to force a revision** — ReviewAgent treats length misses as low/medium severity, not critical. Every live run so far has been approved on round 0 (scores 85–94).
 
 ## 7. Modifying the Studio Itself
