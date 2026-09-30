@@ -120,8 +120,8 @@ harness/         ← Live execution harness (run_pipeline.py)
 n8n/             ← Importable n8n workflow (JSON) and node verification notes
 scripts/         ← Tooling, e.g. the n8n workflow validator
 docs/            ← Handbook, n8n design doc, architecture diagrams (SVG), plans
-tests/           ← Pipeline test results; live run logs in tests/live_runs/
-handoffs/        ← Session export dumps from /context-dump
+tests/           ← Pipeline test results; live run logs are written to tests/live_runs/ (gitignored)
+handoffs/        ← Session export dumps from /context-dump (gitignored)
 deliverables/    ← Outputs produced by the pipeline
 ```
 
@@ -131,7 +131,7 @@ Every agent defines: Role, Goal, Backstory, Tools, Constraints, and Escalation r
 
 All 5 agents are built, reviewed, pipeline-tested, and **active**. The full wire map (9 wires) passed static integration testing — see `tests/pipeline_test_results.md`.
 
-**Live execution is verified.** Eight live end-to-end runs against the Groq API have completed (scores 85–94/100), including real client-style draft requests delivered through the full pipeline. The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. One known gap: the ReviewAgent → DraftAgent revision loop and 3-cycle escalation have never fired live — every run so far has been approved on round 0 (run history in `tests/live_runs/` and the Notion "Pipeline Tests" page).
+**Live execution is verified.** Eight live end-to-end runs against the Groq API have completed (scores 85–94/100), including real client-style draft requests delivered through the full pipeline. The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. One known gap: the ReviewAgent → DraftAgent revision loop and 3-cycle escalation have never fired live — every run so far has been approved on round 0 (run logs are kept locally in `tests/live_runs/`).
 
 **n8n workflow:** imported into a local n8n 2.x and run live (Telegram in and out, the revision loop, a Groq 429 with model fallback). Unlike the harness, the revision loop has fired live there. The stricter gate, the failure branches and the OpenRouter reviewer fallback are built and unit-tested but not yet run live; see the status table in the design doc.
 
