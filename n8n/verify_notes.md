@@ -73,3 +73,17 @@ Changes made:
 - **chainLlm escapes braces.** `promptUtils.js` doubles every `{`/`}` in Chat Messages before building the template, and the user prompt is passed as the `{query}` variable. The earlier doc warning about braces in chain system messages was wrong for this version and has been corrected.
 - **Output wrapping.** chainLlm 1.5 still gives `{output: <parsed object>}` when an output parser is connected, because `shouldUnwrapObjects` is true when a parser is present. The existing `$json.output` references are therefore right.
 - **Newer versions exist.** Newer versions are available: chainLlm 1.9, agent 3.1, set 3.5, if 2.3, webhook 2.1 and respondToWebhook 1.5. They are not needed here; every version used is still supported.
+
+## Update: fallback models moved to OpenRouter
+
+The five `Groq Fallback <Agent>` nodes above were replaced by `OpenRouter Fallback <Agent>` nodes:
+
+- type `@n8n/n8n-nodes-langchain.lmChatOpenRouter` v1, model `openai/gpt-oss-20b`
+- credential `openRouterApi` "DraftStudio OpenRouter", id `REPLACE_ME`
+- `options.maxTokens` (same values as the old `maxTokensToSample`) and `options.temperature` 0.3
+- still wired as `ai_languageModel` with `index: 1` to the same root nodes
+
+Reason: execution 377 hit Groq's 8000 tokens-per-minute cap, and the Groq fallback was rate-limited
+at the same time. Unlike the section above, this node type and its option names were checked
+against the n8n-mcp node catalog (`get_node`), not against the published package source, and the
+model against OpenRouter's public `/models` list (`tools` supported, `max_completion_tokens` 32768).
