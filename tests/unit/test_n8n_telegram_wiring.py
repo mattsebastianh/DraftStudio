@@ -138,8 +138,9 @@ class OpenRouterFallbackTests(unittest.TestCase):
     def setUp(self):
         self.nodes, self.conns = _load()
 
-    def test_no_groq_fallback_nodes_remain(self):
-        self.assertEqual([n for n in self.nodes if n.startswith("Groq Fallback")], [])
+    def test_only_the_reviewer_has_a_groq_fallback(self):
+        # the four Groq-primary agents fall back to OpenRouter; the OpenRouter reviewer falls back to Groq
+        self.assertEqual([n for n in self.nodes if n.startswith("Groq Fallback")], ["Groq Fallback Review"])
 
     def test_each_agent_has_an_openrouter_fallback_on_its_second_model_input(self):
         for agent, max_tokens in self.AGENTS.items():
@@ -180,26 +181,35 @@ class ReviewerModelTests(unittest.TestCase):
         self.assertEqual((cred["id"], cred["name"]), ("REPLACE_ME", "DraftStudio OpenRouter"))
         self.assertEqual(self._edges("OpenRouter Review"), [{"node": "ReviewAgent", "type": "ai_languageModel", "index": 0}])
 
-    def test_review_fallback_is_a_third_family_non_reasoning_model_on_openrouter(self):
-        node = self.nodes["OpenRouter Fallback Review"]
-        self.assertEqual(node["type"], "@n8n/n8n-nodes-langchain.lmChatOpenRouter")
+    def test_review_fallback_is_a_different_provider_and_model_family(self):
+        node = self.nodes["Groq Fallback Review"]
+        self.assertEqual(node["type"], "@n8n/n8n-nodes-langchain.lmChatGroq")
         model = node["parameters"]["model"]
-        self.assertEqual(model, "meta-llama/llama-3.3-70b-instruct")
-        # different family from the primary judge (qwen) and from the drafter (gpt-oss)
+        self.assertEqual(model, "llama-3.3-70b-versatile")
+        # different provider from the primary judge (OpenRouter) and different family from qwen
         self.assertNotIn("qwen", model)
-        self.assertNotIn("gpt-oss", model)
         self.assertEqual(node["parameters"]["options"]["temperature"], 0.1)
-        cred = node["credentials"]["openRouterApi"]
-        self.assertEqual((cred["id"], cred["name"]), ("REPLACE_ME", "DraftStudio OpenRouter"))
+        cred = node["credentials"]["groqApi"]
+        self.assertEqual((cred["id"], cred["name"]), ("REPLACE_ME", "DraftStudio Groq"))
         self.assertEqual(
-            self._edges("OpenRouter Fallback Review"),
+            self._edges("Groq Fallback Review"),
             [{"node": "ReviewAgent", "type": "ai_languageModel", "index": 1}],
         )
         self.assertTrue(self.nodes["ReviewAgent"]["parameters"]["needsFallback"])
 
+    def test_every_agent_has_two_different_llm_providers(self):
+        providers = {}
+        for src, conns in self.conns.items():
+            for groups in conns.get("ai_languageModel", []):
+                for edge in groups:
+                    providers.setdefault(edge["node"], set()).add(self.nodes[src]["type"])
+        self.assertEqual(len(providers), 5)
+        for agent, types in providers.items():
+            self.assertEqual(len(types), 2, agent)
+
     def test_old_review_model_nodes_are_gone(self):
         self.assertNotIn("Groq Review", self.nodes)
-        self.assertNotIn("Groq Fallback Review", self.nodes)
+        self.assertNotIn("OpenRouter Fallback Review", self.nodes)
 
 
 class TelegramSafetyTests(unittest.TestCase):
