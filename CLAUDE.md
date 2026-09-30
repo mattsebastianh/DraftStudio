@@ -54,7 +54,7 @@ handoffs/        ← Session export dumps from /context-dump
 | `/context-dump`  | Export session as a structured handoff doc     |
 
 ## Persistent Memory
-- Project memory lives in `.claude/memory/` (project-local, committed) — NOT in the user-level `~/.claude/projects/<slug>/memory/` store
+- Project memory lives in `.claude/memory/` (project-local, gitignored) — NOT in the user-level `~/.claude/projects/<slug>/memory/` store
 - At session start, read `.claude/memory/MEMORY.md` for the index, then recall individual memory files as needed
 - Write all new memories to `.claude/memory/` and add an index line to its MEMORY.md; never write project memories to the user-level store
 

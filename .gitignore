@@ -24,3 +24,8 @@ __pycache__/
 .agents/
 .claude/skills/figma-*
 .claude/skills/n8n-*
+
+# Private working notes and run logs (kept locally, not published)
+.claude/memory/
+handoffs/2026*
+tests/live_runs/
