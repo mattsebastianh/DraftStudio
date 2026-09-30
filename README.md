@@ -7,6 +7,7 @@
 [![Telegram](https://img.shields.io/badge/channel-Telegram-26A5E4?logo=telegram&logoColor=white)](docs/n8n_workflow_design.md#7-telegram)
 [![Built with claude-code](https://img.shields.io/badge/built%20with-claude--code-D97757)](https://claude.com/claude-code)
 ![Agents](https://img.shields.io/badge/agents-5%20active-2EA043)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](LICENSE)
 
 **An autonomous content studio run by AI agents.**
 
@@ -143,3 +144,7 @@ Planned v2 work: priority handling at intake, `client_id` propagation, multi-cha
 - **Explicit contracts** — every inter-agent message has a schema and a failure path
 - **Humans stay in the loop** — every agent has defined escalation rules
 - **Secrets stay in `.env`** — no keys or tokens in any file. Model IDs live in `.env` too, with one exception: n8n does not read `.env`, so the workflow JSON hard-codes its model IDs on the nodes (the `OPENROUTER_*` variables in `.env` are reference values there; see the design doc)
+
+## License
+
+DraftStudio is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE): free to use, modify and share for non-commercial purposes. Commercial use needs written permission from the author.
