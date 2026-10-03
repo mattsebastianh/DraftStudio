@@ -1,5 +1,9 @@
 # DraftStudio .gitignore
 
+# Secrets and environment
+.env
+.env.local
+
 # Local agent configuration (kept locally, not published)
 /CLAUDE.md
 CLAUDE.local.md
@@ -9,27 +13,21 @@ CLAUDE.local.md
 .claude/
 .agents/
 
-# OS junk
-.DS_Store
-Thumbs.db
-
-# Node (if any tooling is added later)
-node_modules/
-.env
-.env.local
-
-# Python (if any tooling is added later)
-__pycache__/
-*.pyc
-.venv/
-
-# Private working notes, reviews and run logs (kept locally, not published)
+# Private working files (kept locally, not published); folders kept via .gitkeep
+docs/*
+!docs/.gitkeep
 handoffs/*
 !handoffs/.gitkeep
 reviews/*
 !reviews/.gitkeep
 tests/live_runs/
 
-# Docs (kept locally, not published); dir kept via .gitkeep
-docs/*
-!docs/.gitkeep
+# Python / Node (if any tooling is added later)
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+
+# OS junk
+.DS_Store
+Thumbs.db

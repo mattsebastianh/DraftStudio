@@ -1,6 +1,6 @@
 # DraftStudio
 
-![DraftStudio: five AI agents, one quality gate](docs/article_header.svg)
+![DraftStudio: five AI agents, one quality gate](assets/article_header.svg)
 
 [![Python 3](https://img.shields.io/badge/python-3-3776AB?logo=python&logoColor=white)](harness/run_pipeline.py)
 [![n8n workflow](https://img.shields.io/badge/n8n-workflow-EA4B71?logo=n8n&logoColor=white)](docs/n8n_workflow_design.md)
@@ -29,11 +29,11 @@ All agents are built with [claude-code](https://claude.com/claude-code) and powe
 
 ## How Work Flows
 
-![DraftStudio agent pipeline architecture](docs/01_pipeline_architecture_groq_harness.svg)
+![DraftStudio agent pipeline architecture](assets/01_pipeline_architecture_groq_harness.svg)
 
 Research is optional: IntakeAgent routes straight to DraftAgent when the brief needs none, and DraftAgent or ReviewAgent can request more mid-flow (dashed). Red lines are the revision loop (score < 80, max 3 cycles) and human escalation. The n8n version of the same pipeline, with its Telegram entry and reply, error branches and stricter gate:
 
-![DraftStudio n8n workflow architecture](docs/02_pipeline_architecture_n8n.svg)
+![DraftStudio n8n workflow architecture](assets/02_pipeline_architecture_n8n.svg)
 
 The agents communicate over 9 verified **wires** — explicit contracts in `wires/` that define the trigger event, message schema, and failure handling for every hop. Key guarantees:
 
@@ -116,23 +116,27 @@ The same pipeline also exists as an importable n8n workflow, `n8n/draftstudio_pi
 
 The workflow as it looks on the n8n canvas after import:
 
-![DraftStudio pipeline on the n8n canvas](docs/n8n_flow_01.png)
+![DraftStudio pipeline on the n8n canvas](assets/n8n_flow_01.png)
 
 ## Repository Layout
 
 ```
 agents/          ← One subdirectory per agent (agent.md, system_prompt.txt, tools.json)
-agents/registry.yaml  ← Central registry: status, paths, and wires for every agent
+  registry.yaml  ← Central registry: status, paths, and wires for every agent
 wires/           ← Inter-agent communication contracts (YAML)
 specs/           ← Agent specs, written before scaffolding
-reviews/         ← Audit reports from /agent-review
 harness/         ← Live execution harness (run_pipeline.py)
 n8n/             ← Importable n8n workflow (JSON) and node verification notes
 scripts/         ← Tooling, e.g. the n8n workflow validator
-docs/            ← Handbook, n8n design doc, architecture diagrams (SVG), plans
-tests/           ← Pipeline test results; live run logs are written to tests/live_runs/ (gitignored)
-handoffs/        ← Session export dumps from /context-dump (gitignored)
+tests/           ← Unit tests and pipeline test results
 deliverables/    ← Outputs produced by the pipeline
+assets/          ← Images used by this README (header, architecture diagrams, n8n canvas)
+
+Local only (gitignored, kept as empty folders):
+docs/            ← Handbook, n8n design doc, plans
+reviews/         ← Audit reports from /agent-review
+handoffs/        ← Session export dumps from /context-dump
+tests/live_runs/ ← Run logs written by the harness
 ```
 
 Every agent defines: Role, Goal, Backstory, Tools, Constraints, and Escalation rules. Tool definitions are JSON; system prompts are plain text and kept under 500 tokens.
