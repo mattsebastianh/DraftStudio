@@ -29,3 +29,6 @@ handoffs/*
 reviews/*
 !reviews/.gitkeep
 tests/live_runs/
+
+# Local planning docs (kept locally, not published)
+docs/superpowers/

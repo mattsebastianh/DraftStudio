@@ -90,5 +90,20 @@ class ProviderFallbackTests(unittest.TestCase):
                 self.h.chat("s", "u", 10)
 
 
+
+
+class BaseUrlSafetyTest(unittest.TestCase):
+    def test_rejects_non_https_remote_base_urls(self):
+        harness = _load_harness()
+        for url in ["http://api.example.com/v1", "ftp://api.example.com", "file:///etc/passwd", "api.example.com/v1"]:
+            with self.assertRaises(ValueError):
+                harness._require_safe_base_url(url)
+
+    def test_allows_https_and_local_http(self):
+        harness = _load_harness()
+        for url in ["https://api.groq.com/openai/v1", "http://localhost:11434/v1", "http://127.0.0.1:8080/v1"]:
+            harness._require_safe_base_url(url)
+
+
 if __name__ == "__main__":
     unittest.main()

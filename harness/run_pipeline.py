@@ -18,6 +18,7 @@ import json
 import re
 import sys
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,9 +59,18 @@ def openrouter_configured():
     return bool(key) and not key.startswith("your-") and bool(ENV.get("OPENROUTER_PRIMARY_MODEL"))
 
 
+def _require_safe_base_url(base_url):
+    """The API key is sent to base_url, so refuse plain http except for a local server."""
+    parts = urllib.parse.urlsplit(base_url)
+    local = parts.hostname in ("localhost", "127.0.0.1", "::1")
+    if parts.scheme != "https" and not (parts.scheme == "http" and local):
+        raise ValueError(f"refusing to send an API key to {base_url!r}: base URL must be https (or http on localhost)")
+
+
 def _chat_request(base_url, api_key, use_model, system_prompt, user_message, max_tokens, groq_quota_fallback):
     """One provider call with retries. Returns (body, model_used); raises when the provider is exhausted."""
     global ACTIVE_MODEL
+    _require_safe_base_url(base_url)
     for attempt in range(5):
         payload = {
             "model": use_model,

@@ -24,7 +24,9 @@ Things to know when running it:
 - **Telegram:** set *Restrict to Chat IDs* on the trigger to your own chat id. The imported
   placeholder rejects every message until you do.
 - **Prompt injection:** request text goes into the agents' prompts. The only tools agents can call
-  are read-only (Wikipedia and Tavily search), but treat generated content as untrusted.
+  are Wikipedia and Tavily search. They are read-only, but the search query is written by the
+  model, so anything in a prompt can end up in a query. Do not put secrets in requests, and treat
+  generated content as untrusted.
 
 ## Supported versions
 
