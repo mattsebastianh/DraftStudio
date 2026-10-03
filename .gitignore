@@ -1,6 +1,6 @@
 # DraftStudio .gitignore
 
-# Local agent configuration (kept locally, not published); dirs kept via .gitkeep
+# Local agent configuration (kept locally, not published)
 /CLAUDE.md
 CLAUDE.local.md
 /PLAN.md
