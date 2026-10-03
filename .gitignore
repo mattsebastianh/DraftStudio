@@ -1,10 +1,15 @@
 # DraftStudio .gitignore
 
-# Personal local notes
+# Local agent configuration (kept locally, not published); dirs kept via .gitkeep
+/CLAUDE.md
 CLAUDE.local.md
-
-# Claude-code activity log (machine-generated)
-.claude/activity.log
+/PLAN.md
+/.mcp.json
+/skills-lock.json
+.claude/*
+!.claude/.gitkeep
+.agents/*
+!.agents/.gitkeep
 
 # OS junk
 .DS_Store
@@ -20,12 +25,9 @@ __pycache__/
 *.pyc
 .venv/
 
-# Third-party agent skills installed by tooling (skills-lock.json); not project code
-.agents/
-.claude/skills/figma-*
-.claude/skills/n8n-*
-
-# Private working notes and run logs (kept locally, not published)
-.claude/memory/
-handoffs/2026*
+# Private working notes, reviews and run logs (kept locally, not published)
+handoffs/*
+!handoffs/.gitkeep
+reviews/*
+!reviews/.gitkeep
 tests/live_runs/
