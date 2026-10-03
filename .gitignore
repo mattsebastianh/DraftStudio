@@ -6,10 +6,8 @@ CLAUDE.local.md
 /PLAN.md
 /.mcp.json
 /skills-lock.json
-.claude/*
-!.claude/.gitkeep
-.agents/*
-!.agents/.gitkeep
+.claude/
+.agents/
 
 # OS junk
 .DS_Store
