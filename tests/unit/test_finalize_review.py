@@ -94,3 +94,18 @@ def test_malformed_issues_are_treated_as_no_llm_issues():
 def test_score_is_compared_without_truncation():
     assert _clean(dict(REVIEW, score=79.9))["status"] == "revision_required"
     assert _clean(dict(REVIEW, score=80.0))["status"] == "approved"
+
+
+def test_out_of_range_or_non_finite_scores_are_malformed():
+    for score in (float("inf"), float("-inf"), 10**400, 150, -1):
+        out = _clean(dict(REVIEW, score=score))
+        assert out["status"] == "revision_required"
+        assert out["score"] == 0
+        assert any(i["severity"] == "critical" and i["category"] == "malformed_review" for i in out["issues"])
+
+
+def test_score_range_boundaries_are_valid():
+    assert _clean(dict(REVIEW, score=100))["status"] == "approved"
+    zero = _clean(dict(REVIEW, score=0))
+    assert zero["status"] == "revision_required"
+    assert not any(i.get("category") == "malformed_review" for i in zero["issues"])

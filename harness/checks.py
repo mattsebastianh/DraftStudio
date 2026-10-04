@@ -221,7 +221,7 @@ def finalize_review(llm_review, results, threshold):
     issues = list(llm_issues) if isinstance(llm_issues, list) else []
     issues += [r.as_issue() for r in results if not r.passed]
     score = llm_review.get("score")
-    score_valid = isinstance(score, (int, float)) and not isinstance(score, bool) and not math.isnan(score)
+    score_valid = isinstance(score, (int, float)) and not isinstance(score, bool) and 0 <= score <= 100
     if not score_valid:
         score = 0
         issues.append(
