@@ -3,10 +3,10 @@
 ![DraftStudio: five AI agents, one quality gate](assets/article_header.svg)
 
 [![Python 3](https://img.shields.io/badge/python-3-3776AB?logo=python&logoColor=white)](harness/run_pipeline.py)
-[![n8n workflow](https://img.shields.io/badge/n8n-workflow-EA4B71?logo=n8n&logoColor=white)](docs/n8n_workflow_design.md)
+[![n8n workflow](https://img.shields.io/badge/n8n-workflow-EA4B71?logo=n8n&logoColor=white)](n8n/draftstudio_pipeline.workflow.json)
 [![Groq](https://img.shields.io/badge/LLM-Groq-F55036)](https://groq.com)
 [![OpenRouter](https://img.shields.io/badge/LLM-OpenRouter-6467F2)](https://openrouter.ai)
-[![Telegram](https://img.shields.io/badge/channel-Telegram-26A5E4?logo=telegram&logoColor=white)](docs/n8n_workflow_design.md#7-telegram)
+[![Telegram](https://img.shields.io/badge/channel-Telegram-26A5E4?logo=telegram&logoColor=white)](#the-n8n-workflow)
 [![Built with claude-code](https://img.shields.io/badge/built%20with-claude--code-D97757)](https://claude.com/claude-code)
 ![Agents](https://img.shields.io/badge/agents-5%20active-2EA043)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](LICENSE)
@@ -81,8 +81,6 @@ You should get a JSON list of available models.
 
 ## Using the Studio
 
-> **Hands-on guide:** see the [DraftStudio Handbook](docs/draftstudio_handbook.md) for a practical walkthrough of running the pipeline, with a real worked example and troubleshooting.
-
 Open claude-code in the repo root. The studio is operated through five slash commands (project skills in `.claude/skills/`):
 
 | Command | What it does |
@@ -112,7 +110,7 @@ The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies), fa
 
 ### The n8n workflow
 
-The same pipeline also exists as an importable n8n workflow, `n8n/draftstudio_pipeline.workflow.json`, triggered by a webhook, a manual test input or a Telegram bot, with a stricter quality gate than the harness (approval also requires no `high` issue and every stated request constraint met). The webhook requires a Header Auth key, and every agent has two LLM providers (Groq and OpenRouter, each the other's fallback). Setup, security checklist, models and behaviour are in [docs/n8n_workflow_design.md](docs/n8n_workflow_design.md); check the file with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
+The same pipeline also exists as an importable n8n workflow, `n8n/draftstudio_pipeline.workflow.json`, triggered by a webhook, a manual test input or a Telegram bot, with a stricter quality gate than the harness (approval also requires no `high` issue and every stated request constraint met). The webhook requires a Header Auth key, and every agent has two LLM providers (Groq and OpenRouter, each the other's fallback). Check the file with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
 
 The workflow as it looks on the n8n canvas after import:
 
