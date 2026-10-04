@@ -117,7 +117,8 @@
             "confidence": { "type": "integer" },
             "sources": { "type": "array" }
           },
-          "required": ["topic", "findings", "gaps", "confidence", "sources"]
+          "required": ["topic", "findings", "gaps", "confidence", "sources"],
+          "additionalProperties": false
         }
       },
       "required": ["dossier"]
@@ -148,9 +149,25 @@
         "revision_round": {
           "type": "integer",
           "description": "Current revision cycle (0 = first submission)"
+        },
+        "deterministic_checks": {
+          "type": "array",
+          "description": "Rule-based check results computed by the harness before review",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "passed": { "type": "boolean" },
+              "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+              "detail": { "type": "string" },
+              "suggested_fix": { "type": "string" }
+            },
+            "required": ["id", "passed", "severity"]
+          }
         }
       },
-      "required": ["draft", "brief", "revision_round"]
+      "required": ["draft", "brief", "revision_round"],
+      "additionalProperties": false
     }
   },
   {
@@ -179,9 +196,25 @@
         "revision_round": {
           "type": "integer",
           "description": "Current revision cycle number"
+        },
+        "brief": {
+          "type": "object",
+          "description": "The original brief, so the revision keeps every requirement in view"
+        },
+        "previous_draft": {
+          "type": "object",
+          "description": "The draft being revised",
+          "properties": {
+            "title": { "type": "string" },
+            "content": { "type": "string" },
+            "format": { "type": "string" },
+            "unsupported": { "type": "array", "items": { "type": "string" } },
+            "word_count": { "type": "integer" }
+          }
         }
       },
-      "required": ["draft_title", "issues", "revision_round"]
+      "required": ["draft_title", "issues", "revision_round"],
+      "additionalProperties": false
     }
   },
   {
@@ -226,9 +259,14 @@
             "format": { "type": "string" }
           },
           "required": ["topic"]
+        },
+        "dossier": {
+          "type": "object",
+          "description": "Research dossier (ResearchAgent_to_DraftAgent shape), present only when research ran"
         }
       },
-      "required": ["brief"]
+      "required": ["brief"],
+      "additionalProperties": false
     }
   }
 ]

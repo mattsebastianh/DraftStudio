@@ -1,7 +1,8 @@
 wire:
   id: ReviewAgent_to_DraftAgent
-  version: "1.0"
+  version: "1.1"
   created: 2026-04-13
+  updated: 2026-10-03
 
 sender:
   agent: ReviewAgent
@@ -14,6 +15,7 @@ receiver:
 
 message_schema:
   type: object
+  additionalProperties: false
   required:
     - draft_title
     - issues
@@ -45,6 +47,25 @@ message_schema:
       type: integer
       description: "Current revision cycle number"
       example: 1
+    brief:
+      type: object
+      description: "The original brief, so the revision keeps every requirement in view"
+    previous_draft:
+      type: object
+      description: "The draft being revised"
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        format:
+          type: string
+        unsupported:
+          type: array
+          items:
+            type: string
+        word_count:
+          type: integer
 
 failure_handling:
   on_timeout:
@@ -61,3 +82,5 @@ failure_handling:
 metadata:
   description: "Sends revision requests from ReviewAgent back to DraftAgent with specific issues to address"
   data_sensitivity: internal
+  changelog:
+    - "1.1 (2026-10-03): added brief and previous_draft (DraftAgent needs the text it revises); top-level fields closed"

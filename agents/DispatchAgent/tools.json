@@ -172,7 +172,17 @@
                 "tone_alignment": { "type": "integer" }
               }
             },
-            "revision_rounds": { "type": "integer" }
+            "revision_rounds": { "type": "integer" },
+            "review_status": { "type": "string", "enum": ["approved"] }
+          }
+        },
+        "sources": {
+          "type": "array",
+          "description": "Research sources used by the draft",
+          "items": {
+            "type": "object",
+            "properties": { "title": { "type": "string" }, "url": { "type": "string" } },
+            "required": ["url"]
           }
         },
         "client_preferences": {
@@ -189,7 +199,8 @@
           "description": "Client identifier for tracking and delivery"
         }
       },
-      "required": ["draft"]
+      "required": ["draft"],
+      "additionalProperties": false
     }
   }
 ]

@@ -102,7 +102,8 @@
             "confidence": { "type": "integer" },
             "sources": { "type": "array" }
           },
-          "required": ["topic", "findings", "gaps", "confidence", "sources"]
+          "required": ["topic", "findings", "gaps", "confidence", "sources"],
+          "additionalProperties": false
         }
       },
       "required": ["dossier"]
@@ -129,7 +130,8 @@
           "description": "Subtopics to prioritize"
         }
       },
-      "required": ["topic"]
+      "required": ["topic"],
+      "additionalProperties": false
     }
   },
   {
