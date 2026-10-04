@@ -65,11 +65,11 @@ python3 -m venv .venv
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `GROQ_PRIMARY_MODEL` | `llama-3.3-70b-versatile` | Default model for all agent calls |
-| `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-120b` | Used automatically when the primary model's daily token quota (TPD) is exhausted |
+| `GROQ_PRIMARY_MODEL` | `openai/gpt-oss-120b` | Default model for all agent calls |
+| `GROQ_FALLBACK_MODEL` | `qwen/qwen3.8-27b` | Used automatically when the primary model's daily token quota (TPD) is exhausted |
 | `OPENROUTER_API_KEY` | (none) | Enables the second provider; without it a Groq outage stops the harness |
 | `OPENROUTER_PRIMARY_MODEL` | none; e.g. `openai/gpt-oss-120b` (required for the fallback) | Model the harness uses on OpenRouter after Groq fails |
-| `SEARCH_API_KEY` | (none) | [Tavily](https://app.tavily.com) key for ResearchAgent's web search; without it research fails soft (no findings, gaps say why) |
+| `TAVILY_API_KEY` | (none) | [Tavily](https://app.tavily.com) key for ResearchAgent's web search; without it research fails soft (no findings, gaps say why) |
 | `N8N_WEBHOOK_API_KEY` | (none) | `X-API-Key` secret for the n8n webhook (n8n holds its own copy) |
 
 Swap models by editing `.env` — nothing else references model IDs. Per-agent token budgets and reasoning effort live in `harness/config.py`; they leave headroom because reasoning models (the gpt-oss family) spend completion tokens on reasoning.
@@ -137,7 +137,6 @@ harness/         ← Live execution harness (run_pipeline.py and its modules)
 n8n/             ← Importable n8n workflow (JSON) and node verification notes
 scripts/         ← Tooling, e.g. the n8n workflow validator
 tests/           ← Unit tests and pipeline test results
-deliverables/    ← Outputs produced by the pipeline
 assets/          ← Images used by this README (header, architecture diagrams, n8n canvas)
 
 Local only (gitignored, kept as empty folders):
@@ -145,6 +144,7 @@ docs/            ← Handbook, n8n design doc, plans
 reviews/         ← Audit reports from /agent-review
 handoffs/        ← Session export dumps from /context-dump
 tests/live_runs/ ← Run logs written by the harness
+deliverables/    ← Approved deliverables written by the harness
 ```
 
 Every agent defines: Role, Goal, Backstory, Tools, Constraints, and Escalation rules. Tool definitions and output schemas are JSON; system prompts are plain text and kept under 500 tokens.
