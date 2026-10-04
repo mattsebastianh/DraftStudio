@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "required": ["topic", "findings", "gaps", "confidence", "sources"],
+  "properties": {
+    "topic": {"type": "string"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim", "sources", "confidence"],
+        "properties": {
+          "claim": {"type": "string"},
+          "sources": {"type": "array", "items": {"type": "string"}},
+          "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {"title": {"type": "string"}, "url": {"type": "string"}}
+      }
+    }
+  }
+}

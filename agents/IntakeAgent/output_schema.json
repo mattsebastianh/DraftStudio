@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["brief", "work_type", "needs_research", "routing_plan"],
+  "properties": {
+    "brief": {
+      "type": "object",
+      "required": ["topic", "key_points"],
+      "properties": {
+        "topic": {"type": "string", "minLength": 1},
+        "audience": {"type": "string"},
+        "tone": {"type": "string"},
+        "length": {"type": "string"},
+        "key_points": {"type": "array", "items": {"type": "string"}},
+        "format": {"type": "string"}
+      }
+    },
+    "work_type": {"type": "string"},
+    "needs_research": {"type": "boolean"},
+    "routing_plan": {"type": "array", "items": {"type": "string"}}
+  }
+}

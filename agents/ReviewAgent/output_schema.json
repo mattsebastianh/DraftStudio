@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "required": ["dimension_scores", "score", "issues"],
+  "properties": {
+    "dimension_scores": {
+      "type": "object",
+      "required": ["clarity", "accuracy", "completeness", "tone_alignment"],
+      "properties": {
+        "clarity": {"type": "integer", "minimum": 0, "maximum": 100},
+        "accuracy": {"type": "integer", "minimum": 0, "maximum": 100},
+        "completeness": {"type": "integer", "minimum": 0, "maximum": 100},
+        "tone_alignment": {"type": "integer", "minimum": 0, "maximum": 100}
+      }
+    },
+    "score": {"type": "integer", "minimum": 0, "maximum": 100},
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["requirement", "passed"],
+        "properties": {"requirement": {"type": "string"}, "passed": {"type": "boolean"}}
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "description", "suggested_fix"],
+        "properties": {
+          "severity": {"type": "string", "enum": ["critical", "high", "medium", "low"]},
+          "category": {"type": "string"},
+          "description": {"type": "string"},
+          "suggested_fix": {"type": "string"}
+        }
+      }
+    },
+    "status": {"type": "string", "enum": ["approved", "revision_required"]}
+  }
+}

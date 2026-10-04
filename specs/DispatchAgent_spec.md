@@ -27,12 +27,16 @@ After a deliverable passes the quality gate, it needs to be packaged, formatted 
 | Field              | Type   | Destination          | Description                                   |
 |--------------------|--------|----------------------|-----------------------------------------------|
 | package            | object | User                 | The packaged deliverable ready for delivery   |
-| package.content    | string | User                 | Final formatted content                        |
+| package.title      | string | User                 | Deliverable title                              |
+| package.delivery_note | string | User              | Short client-facing note sent with the deliverable |
+| package.status     | string | Internal             | Delivery status, e.g. "ready"                  |
 | package.format     | string | User                 | Format applied                                 |
 | package.sources    | array  | User                 | Research sources consulted                     |
 | package.revision_history | array | User             | Revision notes from ReviewAgent cycles         |
 | package.metadata   | object | User                 | Agency metadata (date, agent pipeline, etc.)  |
 | delivery_status    | string | Internal             | "delivered", "confirmed", "revision_requested" |
+
+The approved content itself is written verbatim by the harness to deliverables/<slug>.md; DispatchAgent never re-emits it (enforces "never alter approved content").
 
 ## Required Tools
 | Tool Name           | Purpose                                      | External Service |

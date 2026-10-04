@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": ["package"],
+  "properties": {
+    "package": {
+      "type": "object",
+      "required": ["title", "delivery_note"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "delivery_note": {"type": "string", "minLength": 1},
+        "status": {"type": "string"},
+        "format": {"type": "string"},
+        "sources": {"type": "array", "items": {"type": "string"}},
+        "revision_history": {"type": "array", "items": {"type": "string"}},
+        "metadata": {"type": "object"}
+      }
+    }
+  }
+}
