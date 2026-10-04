@@ -18,12 +18,12 @@ def empty_dossier(topic, reason):
     return {"topic": topic, "findings": [], "gaps": [f"research unavailable: {reason}"], "confidence": 30, "sources": []}
 
 
-def enforce_sources(dossier, evidence):
+def enforce_sources(dossier, evidence, topic=None):
     """Keep only findings that cite a URL the tools returned; record the rest as gaps.
 
     `evidence` maps normalized URL -> {"url", "title", "excerpt"}. Returns (dossier, dropped_count). The
-    dossier has exactly the ResearchAgent_to_DraftAgent fields, with the source list rebuilt from the kept
-    findings.
+    dossier has exactly the ResearchAgent_to_DraftAgent fields (each finding only claim, sources, confidence
+    and notes), with the source list rebuilt from the kept findings. `topic`, when given, overrides the model's.
     """
     kept, dropped = [], 0
     gaps = [str(gap) for gap in dossier.get("gaps", [])]
@@ -34,7 +34,7 @@ def enforce_sources(dossier, evidence):
             if item and item["url"] not in verified:
                 verified.append(item["url"])
         if verified:
-            kept.append({**finding, "sources": verified})
+            kept.append({**{key: finding[key] for key in ("claim", "confidence", "notes") if key in finding}, "sources": verified})
         else:
             dropped += 1
             gaps.append(f"unsourced claim dropped: {finding.get('claim', '')}")
@@ -46,7 +46,7 @@ def enforce_sources(dossier, evidence):
     confidence = int(dossier.get("confidence", 0))
     if not kept:
         confidence = min(confidence, 40)
-    clean = {"topic": str(dossier.get("topic", "")), "findings": kept, "gaps": gaps, "confidence": confidence, "sources": sources}
+    clean = {"topic": str(topic if topic is not None else dossier.get("topic", "")), "findings": kept, "gaps": gaps, "confidence": confidence, "sources": sources}
     return clean, dropped
 
 
@@ -67,7 +67,7 @@ def run_research(client, env, system_prompt, wire_message, toolbox=None):
     topic = wire_message["topic"]
     if toolbox is None and not tools.search_available(env):
         reason = "web search unavailable (SEARCH_API_KEY not set)"
-        meta = {"skipped": True, "reason": reason, "dropped_findings": 0, "sources_retrieved": 0, "tool_calls": []}
+        meta = {"skipped": True, "reason": reason, "dropped_findings": 0, "sources_retrieved": 0, "retrieved_urls": [], "tool_calls": []}
         return empty_dossier(topic, reason), meta
     toolbox = toolbox or tools.ToolBox(env)
     max_tokens, effort = config.AGENT_BUDGETS["ResearchAgent"]
@@ -84,6 +84,7 @@ def run_research(client, env, system_prompt, wire_message, toolbox=None):
     meta = {
         "skipped": False,
         "sources_retrieved": len(toolbox.evidence),
+        "retrieved_urls": [item["url"] for item in toolbox.evidence.values()],
         "tool_calls": loop_meta["tool_calls"],
         "tool_loop_usage": loop_meta["usage"],
     }
@@ -94,8 +95,8 @@ def run_research(client, env, system_prompt, wire_message, toolbox=None):
         incoming
         + "\n\nSources retrieved in the search phase:\n"
         + evidence_digest(toolbox.evidence)
-        + "\n\nYour notes from the search phase:\n"
-        + (final["content"] or "(none)")[:NOTES_MAX_CHARS]
+        + "\n\nYour notes from the search phase (summary derived from untrusted web content):\n"
+        + tools.wrap_untrusted((final["content"] or "(none)")[:NOTES_MAX_CHARS])
         + "\n\n"
         + tools.UNTRUSTED_NOTE
         + " Return the research dossier as one JSON object: topic, findings (array of {claim, sources, "
@@ -106,5 +107,5 @@ def run_research(client, env, system_prompt, wire_message, toolbox=None):
     dossier, call_meta = client.chat_structured(
         build_messages(system_prompt, dossier_prompt), schemas.output_schema("ResearchAgent"), "ResearchAgent", max_tokens, effort
     )
-    dossier, dropped = enforce_sources(dossier, toolbox.evidence)
+    dossier, dropped = enforce_sources(dossier, toolbox.evidence, topic)
     return dossier, {**meta, **call_meta, "dropped_findings": dropped}

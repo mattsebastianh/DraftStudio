@@ -52,7 +52,7 @@ Clients need accurate, well-sourced research on arbitrary topics before any cont
 | Condition                                      | Action                              |
 |------------------------------------------------|-------------------------------------|
 | Overall confidence < 60%                       | Hand off to human for domain guidance (live harness: the run is flagged in its log and drafting continues with the gaps listed) |
-| No sources found after 3 search attempts       | Hand off to human for manual research |
+| No sources retrieved within 6 tool calls (web_search/fetch_url) | Return an empty findings list with gaps and low confidence (the run continues and is flagged for human review) |
 | Topic requires specialized/expert knowledge    | Hand off to human for domain input  |
 | Contradictory sources with no clear resolution | Flag to human for adjudication      |
 

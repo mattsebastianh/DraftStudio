@@ -25,14 +25,22 @@ def test_enforce_sources_keeps_only_retrieved_urls():
         "sources": [{"title": "made up", "url": "https://made.up/source"}],
         "summary": "extra field",
     }
+    dossier["findings"][0]["url"] = "https://smuggled.example/"  # a key outside the wire's finding shape
+    dossier["findings"][0]["notes"] = "kept"
     clean, dropped = research.enforce_sources(dossier, EVIDENCE)
     assert [f["claim"] for f in clean["findings"]] == ["A"]
-    assert clean["findings"][0]["sources"] == [REG_URL]
+    assert clean["findings"][0] == {"claim": "A", "sources": [REG_URL], "confidence": 80, "notes": "kept"}
     assert dropped == 3
     assert clean["gaps"] == ["g1", "unsourced claim dropped: B", "unsourced claim dropped: C", "unsourced claim dropped: D"]
     assert clean["sources"] == [{"title": "Regulation (EU) 2024/1689", "url": REG_URL}]
     assert set(clean) == {"topic", "findings", "gaps", "confidence", "sources"}
     assert clean["confidence"] == 80
+
+
+def test_enforce_sources_topic_argument_wins_over_the_models():
+    dossier = {"topic": "model's topic", "findings": [], "gaps": [], "confidence": 50, "sources": []}
+    assert research.enforce_sources(dossier, EVIDENCE, topic="wire topic")[0]["topic"] == "wire topic"
+    assert research.enforce_sources(dossier, EVIDENCE)[0]["topic"] == "model's topic"
 
 
 def test_enforce_sources_all_dropped_lowers_confidence():
@@ -63,6 +71,7 @@ def test_run_research_fails_soft_without_search_key():
     dossier, meta = research.run_research(make_client(post), {}, "sys", WIRE_MSG)
     assert dossier["findings"] == [] and "SEARCH_API_KEY" in dossier["gaps"][0]
     assert post.calls == [] and meta["skipped"] is True and meta["dropped_findings"] == 0
+    assert meta["retrieved_urls"] == []
 
 
 def test_run_research_fails_soft_when_nothing_could_be_retrieved():
@@ -74,6 +83,7 @@ def test_run_research_fails_soft_when_nothing_could_be_retrieved():
     dossier, meta = research.run_research(make_client(post, SEARCH_ENV), SEARCH_ENV, "sys", WIRE_MSG, toolbox=box)
     assert dossier == research.empty_dossier("EU AI Act", "no sources could be retrieved")
     assert len(post.calls) == 2 and meta["skipped"] is True and meta["tool_calls"][0]["ok"] is False
+    assert meta["retrieved_urls"] == []
 
 
 def test_run_research_keeps_only_findings_that_cite_retrieved_urls():
@@ -97,9 +107,22 @@ def test_run_research_keeps_only_findings_that_cite_retrieved_urls():
     dossier, meta = research.run_research(make_client(post, SEARCH_ENV), SEARCH_ENV, "sys", WIRE_MSG, toolbox=box)
     assert [f["claim"] for f in dossier["findings"]] == ["The AI Act is Regulation (EU) 2024/1689"]
     assert dossier["sources"] == [{"title": "Regulation (EU) 2024/1689", "url": REG_URL}]
+    assert dossier["topic"] == "EU AI Act" and meta["retrieved_urls"] == [REG_URL]
     assert meta["dropped_findings"] == 1 and meta["sources_retrieved"] == 1 and meta["skipped"] is False
     assert meta["schema_enforced"] is True
     dossier_call = post.payloads[2]["messages"]
     assert [m["role"] for m in dossier_call] == ["system", "user"]  # an evidence digest, not the raw transcript
     assert "<untrusted_tool_output>" in dossier_call[1]["content"] and REG_URL in dossier_call[1]["content"]
-    assert "The regulation is on EUR-Lex." in dossier_call[1]["content"]
+    assert "<untrusted_tool_output>\nThe regulation is on EUR-Lex.\n</untrusted_tool_output>" in dossier_call[1]["content"]
+    assert "summary derived from untrusted web content" in dossier_call[1]["content"]
+
+
+def test_run_research_takes_the_topic_from_the_wire_message_not_the_model():
+    search_body = {"results": [{"title": "Reg", "url": REG_URL, "content": "text"}]}
+    reply = {"topic": "something else", "findings": [], "gaps": [], "confidence": 50, "sources": []}
+    post = FakePost(
+        body("", finish="tool_calls", tool_calls=tool_call("web_search", {"query": "q"})), body("notes"), body(json.dumps(reply))
+    )
+    box = tools.ToolBox(SEARCH_ENV, opener=opener_returning(search_body), resolve=public_resolve)
+    dossier, _ = research.run_research(make_client(post, SEARCH_ENV), SEARCH_ENV, "sys", WIRE_MSG, toolbox=box)
+    assert dossier["topic"] == "EU AI Act"

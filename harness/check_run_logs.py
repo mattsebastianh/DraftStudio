@@ -7,8 +7,26 @@ Prints PASS/FAIL per log and exits non-zero if any log fails.
 
 import json
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from harness.urls import normalize_url  # noqa: E402
 
 STEP_META = ("schema_enforced", "validation_retries", "finish_reasons")
+
+
+def _research_problems(step, output):
+    findings = output.get("findings", [])
+    if any(not finding.get("sources") for finding in findings):
+        return ["A2: a research finding without a source reached DraftAgent"]
+    if "retrieved_urls" not in step:  # logs from before the harness recorded retrieved URLs
+        return []
+    retrieved = {normalize_url(str(url)) for url in step["retrieved_urls"]}
+    cited = {str(url) for finding in findings for url in finding["sources"]}
+    if any(normalize_url(url) not in retrieved for url in cited):
+        return ["A2: a research finding cites a URL the tools never retrieved"]
+    return []
 
 
 def check(log):
@@ -28,8 +46,8 @@ def check(log):
         if step.get("used_extract_json"):
             problems.append(f"A1: {agent} reply needed the extract_json fallback")
         output = step.get("output") or {}
-        if agent == "ResearchAgent" and any(not finding.get("sources") for finding in output.get("findings", [])):
-            problems.append("A2: a research finding without a source reached DraftAgent")
+        if agent == "ResearchAgent":
+            problems.extend(_research_problems(step, output))
         if agent == "ReviewAgent" and "checks" not in output:
             problems.append("A5: review step has no deterministic check results")
     return problems
@@ -38,8 +56,11 @@ def check(log):
 def main(paths):
     failed = False
     for path in paths:
-        with open(path) as handle:
-            problems = check(json.load(handle))
+        try:
+            with open(path) as handle:
+                problems = check(json.load(handle))
+        except (OSError, ValueError, AttributeError, TypeError) as err:  # unreadable, invalid JSON or not a run log
+            problems = [f"could not read run log: {type(err).__name__}"]
         print(("FAIL " if problems else "PASS ") + path)
         for problem in problems:
             print("   - " + problem)

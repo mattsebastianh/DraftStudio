@@ -64,3 +64,36 @@ def test_main_reports_and_exits_nonzero_on_failure(tmp_path, capsys):
     assert check_run_logs.main([str(good), str(bad)]) == 1
     out = capsys.readouterr().out
     assert f"PASS {good}" in out and f"FAIL {bad}" in out
+
+
+def research_step(findings, **extra):
+    return {**STEP, "agent": "ResearchAgent", "skipped": False, "output": {"findings": findings}, **extra}
+
+
+def test_finding_citing_an_unretrieved_url_fails_a2():
+    finding = {"claim": "x", "sources": ["https://made.up/x"]}
+    found = problems(research_step([finding], retrieved_urls=["https://real.example/page"]))
+    assert any(p.startswith("A2") and "never retrieved" in p for p in found)
+
+
+def test_finding_citing_a_retrieved_url_passes_even_with_a_trailing_slash_difference():
+    finding = {"claim": "x", "sources": ["https://Real.example/page/"]}
+    assert problems(research_step([finding], retrieved_urls=["https://real.example/page"])) == []
+
+
+def test_logs_without_retrieved_urls_keep_the_non_empty_sources_check():
+    finding = {"claim": "x", "sources": ["https://anything.example/"]}
+    assert problems(research_step([finding])) == []
+
+
+def test_unreadable_and_invalid_logs_fail_without_stopping_the_batch(tmp_path, capsys):
+    good, garbage, missing, wrong_shape = (tmp_path / n for n in ("good.json", "garbage.json", "missing.json", "list.json"))
+    good.write_text(json.dumps(log_with(STEP)))
+    garbage.write_text("{not json")
+    wrong_shape.write_text("[1, 2]")
+    assert check_run_logs.main([str(garbage), str(missing), str(wrong_shape), str(good)]) == 1
+    out = capsys.readouterr().out
+    assert f"FAIL {garbage}\n   - could not read run log: JSONDecodeError" in out
+    assert f"FAIL {missing}\n   - could not read run log: FileNotFoundError" in out
+    assert f"FAIL {wrong_shape}\n   - could not read run log: AttributeError" in out
+    assert f"PASS {good}" in out and "Traceback" not in out
