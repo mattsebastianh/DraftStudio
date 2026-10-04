@@ -33,7 +33,7 @@ class ToolError(Exception):
 
 
 def search_available(env):
-    key = env.get("SEARCH_API_KEY", "")
+    key = env.get("TAVILY_API_KEY", "")
     return bool(key) and not key.startswith("your-")
 
 
@@ -66,8 +66,8 @@ def _failure(what, err):
 def search(query, max_results, env, opener=None):
     """Tavily search. Returns [{title, url, snippet}] for public URLs; raises ToolError."""
     if not search_available(env):
-        raise ToolError("web search unavailable (SEARCH_API_KEY not set)")
-    base_url = env.get("SEARCH_BASE_URL") or DEFAULT_SEARCH_URL
+        raise ToolError("web search unavailable (TAVILY_API_KEY not set)")
+    base_url = env.get("TAVILY_BASE_URL") or DEFAULT_SEARCH_URL
     try:
         require_safe_base_url(base_url)
     except ValueError as err:
@@ -78,7 +78,7 @@ def search(query, max_results, env, opener=None):
         headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
     )
     # Unredirected: urllib copies req.headers to a redirect target, which must never receive the key.
-    req.add_unredirected_header("Authorization", "Bearer " + env["SEARCH_API_KEY"])
+    req.add_unredirected_header("Authorization", "Bearer " + env["TAVILY_API_KEY"])
     try:
         with (opener or urllib.request.urlopen)(req, timeout=30) as resp:
             body = json.load(resp)

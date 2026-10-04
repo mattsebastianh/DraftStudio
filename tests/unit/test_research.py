@@ -8,7 +8,7 @@ WIRE_MSG = {"topic": "EU AI Act", "focus_areas": ["scope"]}
 REG_URL = "https://eur-lex.europa.eu/eli/reg/2024/1689/oj"
 OTHER_URL = "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32024R1689"
 EVIDENCE = {REG_URL: {"url": REG_URL, "title": "Regulation (EU) 2024/1689", "excerpt": "Artificial Intelligence Act"}}
-SEARCH_ENV = {**ENV, "SEARCH_API_KEY": "real"}
+SEARCH_ENV = {**ENV, "TAVILY_API_KEY": "real"}
 
 
 def test_enforce_sources_keeps_only_retrieved_urls():
@@ -69,7 +69,7 @@ def test_evidence_digest_is_wrapped_and_bounded():
 def test_run_research_fails_soft_without_search_key():
     post = FakePost()  # any model call would fail with IndexError
     dossier, meta = research.run_research(make_client(post), {}, "sys", WIRE_MSG)
-    assert dossier["findings"] == [] and "SEARCH_API_KEY" in dossier["gaps"][0]
+    assert dossier["findings"] == [] and "TAVILY_API_KEY" in dossier["gaps"][0]
     assert post.calls == [] and meta["skipped"] is True and meta["dropped_findings"] == 0
     assert meta["retrieved_urls"] == []
 

@@ -66,7 +66,7 @@ def run_research(client, env, system_prompt, wire_message, toolbox=None):
     """Return (dossier, meta); the dossier is shaped like the ResearchAgent_to_DraftAgent wire."""
     topic = wire_message["topic"]
     if toolbox is None and not tools.search_available(env):
-        reason = "web search unavailable (SEARCH_API_KEY not set)"
+        reason = "web search unavailable (TAVILY_API_KEY not set)"
         meta = {"skipped": True, "reason": reason, "dropped_findings": 0, "sources_retrieved": 0, "retrieved_urls": [], "tool_calls": []}
         return empty_dossier(topic, reason), meta
     toolbox = toolbox or tools.ToolBox(env)

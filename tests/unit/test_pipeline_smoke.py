@@ -103,7 +103,7 @@ def test_research_without_search_key_fails_soft_and_flags_the_run(repo):
 
 
 def test_research_with_tools_feeds_a_sourced_dossier_downstream(repo):
-    env = {**ENV, "SEARCH_API_KEY": "real"}
+    env = {**ENV, "TAVILY_API_KEY": "real"}
     search_body = {"results": [{"title": "Regulation (EU) 2024/1689", "url": REG_URL, "content": "AI Act"}]}
     dossier = {
         "topic": "Vacation policy",
@@ -130,7 +130,7 @@ def test_research_with_tools_feeds_a_sourced_dossier_downstream(repo):
 
 
 def test_a_revision_after_research_receives_the_sources(repo):
-    env = {**ENV, "SEARCH_API_KEY": "real"}
+    env = {**ENV, "TAVILY_API_KEY": "real"}
     search_body = {"results": [{"title": "Regulation (EU) 2024/1689", "url": REG_URL, "content": "AI Act"}]}
     dossier = {
         "topic": "Vacation policy",
@@ -192,7 +192,7 @@ def only_log(repo):
 
 
 def test_invalid_research_dossier_keeps_its_raw_reply_and_names_the_step(repo):
-    env = {**ENV, "SEARCH_API_KEY": "real"}
+    env = {**ENV, "TAVILY_API_KEY": "real"}
     search_body = {"results": [{"title": "Regulation (EU) 2024/1689", "url": REG_URL, "content": "AI Act"}]}
     box = tools.ToolBox(env, opener=opener_returning(search_body), resolve=public_resolve)
     invalid = json.dumps({"topic": "Vacation policy"})  # no findings, gaps, confidence or sources

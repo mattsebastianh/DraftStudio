@@ -10,14 +10,14 @@ from harness import tools
 from harness.urls import is_public_url, normalize_url
 from tests.unit.fakes import FakeResponse, opener_returning, private_resolve, public_resolve
 
-ENV = {"SEARCH_API_KEY": "real-key", "SEARCH_BASE_URL": "https://search.example/search"}
+ENV = {"TAVILY_API_KEY": "real-key", "TAVILY_BASE_URL": "https://search.example/search"}
 SEARCH_BODY = {"results": [{"title": "T", "url": "https://a.com/x", "content": "snippet text", "score": 0.9}]}
 
 
 def test_search_available():
     assert tools.search_available(ENV)
     assert not tools.search_available({})
-    assert not tools.search_available({"SEARCH_API_KEY": "your-search-api-key-here"})
+    assert not tools.search_available({"TAVILY_API_KEY": "your-tavily-api-key-here"})
 
 
 def test_search_maps_results_and_sends_bearer_key():
@@ -34,7 +34,7 @@ def test_search_drops_non_public_result_urls():
 
 def test_search_refuses_to_send_the_key_over_http():
     with pytest.raises(tools.ToolError):
-        tools.search("q", 3, {**ENV, "SEARCH_BASE_URL": "http://search.example/search"}, opener=opener_returning(SEARCH_BODY))
+        tools.search("q", 3, {**ENV, "TAVILY_BASE_URL": "http://search.example/search"}, opener=opener_returning(SEARCH_BODY))
 
 
 def test_search_failures_raise_tool_error():
