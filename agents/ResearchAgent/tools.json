@@ -99,7 +99,7 @@
   },
   {
     "name": "send_to_DraftAgent",
-    "description": "Send a completed research dossier to DraftAgent for content creation. Only send when dossier confidence >= 60%.",
+    "description": "Send a completed research dossier to DraftAgent for content creation. A dossier under 60% confidence is still sent, with its gaps listed; the run is flagged for human review.",
     "parameters": {
       "type": "object",
       "properties": {

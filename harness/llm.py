@@ -1,5 +1,5 @@
 """All model calls: the provider chain (Groq, then OpenRouter), the daily-quota model fallback,
-retries, and schema-enforced replies with validation retries."""
+retries, schema-enforced replies with validation retries, and a capped tool loop."""
 
 import json
 import re
@@ -17,6 +17,7 @@ from harness.urls import require_safe_base_url
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 RETRYABLE_CODES = (0, 429, 500, 502, 503, 504)
 MIN_CLAMPED_MAX_TOKENS = 1_024
+MAX_TOOL_RESULT_CHARS = 6_000
 _TPM_LIMIT_RE = re.compile(r"limit\s+(\d+),\s*requested\s+(\d+)", re.IGNORECASE)
 
 
@@ -337,3 +338,44 @@ class LLMClient:
                 "content": "Your reply failed validation: " + "; ".join(errors) + ". Return the corrected JSON object only.",
             }
             messages = messages + ([{"role": "assistant", "content": raw}] if raw else []) + [feedback]
+
+    # -- tool loop --------------------------------------------------------------------
+    def chat_with_tools(self, messages, tools, run_tool, max_calls, max_tokens, reasoning_effort=None):
+        """Let the model call tools until it answers or the budget is spent.
+
+        Returns (messages, final, meta): the transcript including tool turns and the final answer, the last
+        completion, and {"tool_calls", "seconds", "usage"}. Once `max_calls` tools have run, tools are no
+        longer offered; after max_calls + 2 turns the loop stops even if the model keeps asking.
+        """
+        messages = list(messages)
+        meta = {"tool_calls": [], "seconds": 0.0, "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
+        calls = 0
+        for _ in range(max_calls + 2):
+            res = self.complete(messages, max_tokens, tools=tools if calls < max_calls else None, reasoning_effort=reasoning_effort)
+            meta["seconds"] = round(meta["seconds"] + res["seconds"], 1)
+            for key in meta["usage"]:
+                meta["usage"][key] += res["usage"].get(key) or 0
+            requested = res["message"].get("tool_calls") or []
+            if not requested:
+                break
+            messages.append({"role": "assistant", "content": res["content"], "tool_calls": requested})
+            for call in requested:
+                function = call.get("function") or {}
+                name = function.get("name", "")
+                if calls >= max_calls:
+                    result = "error: tool budget exhausted; answer with the evidence you have"
+                else:
+                    try:
+                        args = json.loads(function.get("arguments") or "{}")
+                        if not isinstance(args, dict):
+                            raise ValueError("arguments must be a JSON object")
+                    except ValueError as err:  # json.JSONDecodeError is a ValueError too
+                        result = f"error: invalid tool arguments ({err})"
+                    else:
+                        calls += 1
+                        self.log(f"    tool {name}({json.dumps(args)[:80]})")
+                        result = str(run_tool(name, args))
+                        meta["tool_calls"].append({"name": name, "args": args, "ok": not result.startswith("error:")})
+                messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": result[:MAX_TOOL_RESULT_CHARS]})
+        messages.append({"role": "assistant", "content": res["content"]})
+        return messages, res, meta
