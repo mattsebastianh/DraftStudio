@@ -276,3 +276,23 @@ def test_toolbox_fetch_of_a_page_without_text_records_no_evidence():
     box = tools.ToolBox(ENV, opener=opener_returning(page), resolve=public_resolve)
     assert box.run("fetch_url", {"url": "https://a.com/x"}) == tools.wrap_untrusted("")
     assert box.evidence == {}
+
+
+def test_wrapped_tool_output_fits_the_model_budget_and_keeps_its_closing_tag():
+    from harness.llm import MAX_TOOL_RESULT_CHARS
+
+    cjk = {"results": [{"title": "题" * 200, "url": f"https://a.com/{n}", "content": "字" * 600} for n in range(5)]}
+    out = tools.ToolBox(ENV, opener=opener_returning(cjk), resolve=public_resolve).run("web_search", {"query": "x"})
+    assert len(out) <= MAX_TOOL_RESULT_CHARS and out.endswith("</untrusted_tool_output>")
+    assert "字" in out  # not unicode-escaped
+
+    page = b"<title>Big</title><p>" + b"word " * 200_000 + b"</p>"
+    box = tools.ToolBox(ENV, opener=opener_returning(page), resolve=public_resolve)
+    out = box.run("fetch_url", {"url": "https://a.com/big"})
+    assert len(out) <= MAX_TOOL_RESULT_CHARS and out.endswith("</untrusted_tool_output>")
+
+
+def test_oversized_inner_text_is_truncated_before_wrapping(monkeypatch):
+    monkeypatch.setattr(tools, "fetch", lambda *a, **k: ("T", "x" * 20_000))
+    out = tools.ToolBox(ENV, resolve=public_resolve).run("fetch_url", {"url": "https://a.com/x"})
+    assert len(out) <= tools.MAX_RESULT_CHARS + 100 and out.endswith("</untrusted_tool_output>")

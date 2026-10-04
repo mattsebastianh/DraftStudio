@@ -1,7 +1,14 @@
+import email.message
+import http.client
+import io
+import json
+import urllib.error
+import urllib.request
+
 import pytest
 
 from harness import config
-from harness.llm import LLMHTTPError, SchemaValidationError, TruncatedReply, build_messages
+from harness.llm import LLMHTTPError, SchemaValidationError, TruncatedReply, _seconds, build_messages, http_post
 from harness.urls import require_safe_base_url
 from tests.unit.fakes import ENV, OPENROUTER_ENV, FakePost, body, make_client
 
@@ -72,6 +79,21 @@ def test_provider_json_validate_failure_counts_as_a_validation_retry():
     assert data == {"score": 4} and meta["validation_retries"] == 1
     assert client.schema_mode == {}
     assert post.payloads[1]["messages"][-2] == {"role": "assistant", "content": '{"score": "x"}'}
+    assert "$.score: 'x' is not of type 'integer'" in post.payloads[1]["messages"][-1]["content"]
+
+
+def test_json_validate_failure_without_a_usable_generation_feeds_back_the_provider_message():
+    for generation in ("", '{\\"score\\": 4}'):  # empty, or valid JSON that Groq still rejected
+        detail = (
+            '{"error": {"message": "Failed to generate JSON. Please adjust your prompt.", '
+            f'"code": "json_validate_failed", "failed_generation": "{generation}"}}}}'
+        )
+        post = FakePost(LLMHTTPError(400, detail), body('{"score": 4}'))
+        data, meta = make_client(post).chat_structured(MSGS, SCHEMA, "R", 1000)
+        assert data == {"score": 4} and meta["validation_retries"] == 1
+        feedback = post.payloads[1]["messages"][-1]["content"]
+        assert "Failed to generate JSON. Please adjust your prompt." in feedback
+        assert "rejected its own reply" not in feedback
 
 
 # --- budgets ---------------------------------------------------------------------
@@ -246,3 +268,112 @@ def test_client_never_sends_a_key_to_an_http_base_url():
     with pytest.raises(ValueError):
         client.chat_structured(MSGS, SCHEMA, "R", 1000)
     assert post.calls == []
+
+
+# --- http_post ---------------------------------------------------------------------
+
+
+class _Resp(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _post_with(opener):
+    return http_post("https://api.test/v1", "secret-key", {"model": "m"}, opener=opener)
+
+
+def test_api_key_is_sent_unredirected_and_never_to_redirect_targets():
+    seen = {}
+
+    def opener(req, timeout=None):
+        seen["req"] = req
+        return _Resp(b'{"choices": []}')
+
+    assert _post_with(opener) == {"choices": []}
+    req = seen["req"]
+    assert req.full_url == "https://api.test/v1/chat/completions"
+    assert "secret-key" not in str(req.headers) and "Authorization" not in req.headers
+    assert req.unredirected_hdrs["Authorization"] == "Bearer secret-key"
+    redirected = urllib.request.HTTPRedirectHandler().redirect_request(req, None, 302, "Found", {}, "http://evil.example/")
+    assert "Authorization" not in dict(redirected.header_items())
+    assert "secret-key" not in str(dict(redirected.header_items()))
+
+
+def test_http_post_maps_http_errors_with_code_detail_and_retry_after():
+    headers = email.message.Message()
+    headers["Retry-After"] = "7"
+
+    def opener(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 429, "Too Many", headers, io.BytesIO(b"slow down"))
+
+    with pytest.raises(LLMHTTPError) as caught:
+        _post_with(opener)
+    assert (caught.value.code, caught.value.detail, caught.value.retry_after) == (429, "slow down", 7.0)
+
+
+def test_http_post_unreadable_error_body_is_still_an_llm_http_error():
+    class Broken(io.BytesIO):
+        def read(self, *args):
+            raise http.client.IncompleteRead(b"")
+
+    def opener(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 502, "Bad Gateway", email.message.Message(), Broken())
+
+    with pytest.raises(LLMHTTPError) as caught:
+        _post_with(opener)
+    assert caught.value.code == 502
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        http.client.IncompleteRead(b""),
+        urllib.error.URLError("no route"),
+        TimeoutError("timed out"),
+    ],
+)
+def test_http_post_connection_level_failures_are_code_zero(failure):
+    def opener(req, timeout=None):
+        raise failure
+
+    with pytest.raises(LLMHTTPError) as caught:
+        _post_with(opener)
+    assert caught.value.code == 0
+
+
+def test_http_post_incomplete_read_while_decoding_the_body_is_code_zero():
+    class Truncated(_Resp):
+        def read(self, *args):
+            raise http.client.IncompleteRead(b"{")
+
+    with pytest.raises(LLMHTTPError) as caught:
+        _post_with(lambda req, timeout=None: Truncated())
+    assert caught.value.code == 0
+
+
+def test_http_post_non_json_body_is_code_zero():
+    with pytest.raises(LLMHTTPError) as caught:
+        _post_with(lambda req, timeout=None: _Resp(b"<html>gateway</html>"))
+    assert caught.value.code == 0
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("5", 5.0),
+        ("0", 0.0),
+        ("-3", None),
+        ("inf", None),
+        ("-inf", None),
+        ("nan", None),
+        ("9999", 120.0),
+        ("Wed, 21 Oct 2026 07:28:00 GMT", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_retry_after_is_sanitised(value, expected):
+    assert _seconds(value) == expected

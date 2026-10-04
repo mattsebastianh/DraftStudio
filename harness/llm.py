@@ -1,7 +1,9 @@
 """All model calls: the provider chain (Groq, then OpenRouter), the daily-quota model fallback,
 retries, schema-enforced replies with validation retries, and a capped tool loop."""
 
+import http.client
 import json
+import math
 import re
 import time
 import urllib.error
@@ -18,6 +20,7 @@ DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 RETRYABLE_CODES = (0, 429, 500, 502, 503, 504)
 MIN_CLAMPED_MAX_TOKENS = 1_024
 MAX_TOOL_RESULT_CHARS = 6_000
+MAX_RETRY_AFTER_SECONDS = 120
 _TPM_LIMIT_RE = re.compile(r"limit\s+(\d+),\s*requested\s+(\d+)", re.IGNORECASE)
 
 
@@ -56,7 +59,13 @@ class SchemaValidationError(ReplyError):
 
 
 class InvalidGeneration(ReplyError):
-    """The provider rejected the model's own output as invalid JSON (Groq: json_validate_failed)."""
+    """The provider rejected the model's own output as invalid JSON (Groq: json_validate_failed).
+
+    `raw` is the failed generation; `provider_message` is the provider's own explanation."""
+
+    def __init__(self, message, raw="", provider_message=""):
+        super().__init__(message, raw)
+        self.provider_message = provider_message
 
 
 @dataclass
@@ -84,32 +93,40 @@ def openrouter_configured(env):
     return bool(key) and not key.startswith("your-") and bool(env.get("OPENROUTER_PRIMARY_MODEL"))
 
 
-def http_post(base_url, api_key, payload, timeout=300):
+def http_post(base_url, api_key, payload, timeout=300, opener=None):
     """POST one chat completion. Raises LLMHTTPError for HTTP, connection and non-JSON failures."""
     req = urllib.request.Request(
         base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(payload).encode(),
-        headers={
-            "Authorization": "Bearer " + api_key,
-            "Content-Type": "application/json",
-            "User-Agent": "DraftStudio-harness/1.0",
-        },
+        headers={"Content-Type": "application/json", "User-Agent": "DraftStudio-harness/1.0"},
     )
+    # Unredirected: urllib copies req.headers to a redirect target, which must never receive the key.
+    req.add_unredirected_header("Authorization", "Bearer " + api_key)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with (opener or urllib.request.urlopen)(req, timeout=timeout) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as err:
         retry_after = _seconds(err.headers.get("Retry-After") if err.headers else None)
-        raise LLMHTTPError(err.code, err.read().decode(errors="replace")[:20_000], retry_after) from err
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as err:
-        raise LLMHTTPError(0, str(err)) from err
+        try:
+            detail = err.read().decode(errors="replace")[:20_000]
+        except (http.client.HTTPException, OSError) as read_err:
+            detail = f"unreadable error body ({type(read_err).__name__})"
+        finally:
+            err.close()
+        raise LLMHTTPError(err.code, detail, retry_after) from err
+    except (urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError, ValueError) as err:
+        raise LLMHTTPError(0, f"{type(err).__name__}: {err}") from err  # ValueError covers JSONDecodeError
 
 
 def _seconds(value):
+    """A Retry-After header as seconds: None unless a finite, non-negative number; at most 120."""
     try:
-        return float(value) if value is not None else None
+        seconds = float(value) if value is not None else None
     except ValueError:
         return None  # an HTTP-date Retry-After: use exponential backoff instead
+    if seconds is None or not math.isfinite(seconds) or seconds < 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
 
 
 def _clamped_budget(detail, budget):
@@ -122,9 +139,9 @@ def _clamped_budget(detail, budget):
     return smaller if MIN_CLAMPED_MAX_TOKENS <= smaller < budget else None
 
 
-def _failed_generation(detail):
+def _error_field(detail, field):
     try:
-        return str(json.loads(detail)["error"].get("failed_generation") or "")
+        return str(json.loads(detail)["error"].get(field) or "")
     except (ValueError, KeyError, TypeError, AttributeError):
         return ""
 
@@ -228,7 +245,9 @@ class LLMClient:
                     raise
                 if err.code == 400 and "json_validate_failed" in low:
                     raise InvalidGeneration(
-                        f"{provider.name}:{model} rejected its own reply as invalid JSON", _failed_generation(err.detail)
+                        f"{provider.name}:{model} rejected its own reply as invalid JSON",
+                        _error_field(err.detail, "failed_generation"),
+                        _error_field(err.detail, "message")[:300],
                     ) from err
                 if err.code == 400 and response_format and any(
                     word in low for word in ("response_format", "json_schema", "json_object", "json mode")
@@ -312,7 +331,12 @@ class LLMClient:
                 continue
             except InvalidGeneration as err:
                 meta["finish_reasons"].append("invalid_generation")
-                errors, raw = [str(err)], err.raw
+                raw, errors = err.raw, []
+                if raw:  # name the real problems in the failed generation
+                    data, _, error = self._parse(raw)
+                    errors = [error] if error else validation_errors(data, schema)
+                if not errors:
+                    errors = [err.provider_message or str(err)]
             else:
                 self._accumulate(meta, res, mode)
                 raw = res["content"]
