@@ -3,8 +3,8 @@ import shutil
 
 import pytest
 
-from harness import config, run_pipeline, tools
-from harness.llm import LLMHTTPError
+from harness import config, run_pipeline, tools, wires
+from harness.llm import LLMHTTPError, SchemaValidationError
 from tests.unit.fakes import ENV, OPENROUTER_ENV, FakePost, body, make_client, opener_returning, public_resolve, tool_call
 
 INTAKE = {
@@ -142,6 +142,7 @@ def test_a_failing_step_still_writes_the_run_log(repo):
     assert len(logs) == 1
     saved = json.loads(logs[0].read_text())
     assert saved["error"].startswith("LLMHTTPError") and saved["steps"] == []
+    assert saved["failed_step"] == "IntakeAgent" and "bad_reply" not in saved
 
 
 def test_existing_deliverables_are_never_overwritten(repo):
@@ -150,3 +151,77 @@ def test_existing_deliverables_are_never_overwritten(repo):
     log, _ = run(repo, INTAKE, draft(GOOD), review(90), PACKAGE)
     assert (repo / "deliverables" / "vacation_policy.md").read_text() == "earlier deliverable\n"
     assert log["deliverable"] == f"deliverables/vacation_policy_{log['run_id']}.md"
+
+
+def only_log(repo):
+    (path,) = (repo / "tests" / "live_runs").glob("run_*.json")
+    return json.loads(path.read_text())
+
+
+def test_invalid_research_dossier_keeps_its_raw_reply_and_names_the_step(repo):
+    env = {**ENV, "SEARCH_API_KEY": "real"}
+    search_body = {"results": [{"title": "Regulation (EU) 2024/1689", "url": REG_URL, "content": "AI Act"}]}
+    box = tools.ToolBox(env, opener=opener_returning(search_body), resolve=public_resolve)
+    invalid = json.dumps({"topic": "Vacation policy"})  # no findings, gaps, confidence or sources
+    post = FakePost(
+        body(json.dumps({**INTAKE, "needs_research": True})),
+        body("", finish="tool_calls", tool_calls=tool_call("web_search", {"query": "vacation law"})),
+        body("Found the regulation."),
+        body(invalid),
+        body(invalid),
+        body(invalid),
+    )
+    with pytest.raises(SchemaValidationError):
+        run_pipeline.run("Write a vacation policy memo", make_client(post, env), env, repo=repo, toolbox=box)
+    saved = only_log(repo)
+    assert saved["failed_step"] == "ResearchAgent" and saved["error"].startswith("SchemaValidationError")
+    assert (repo / saved["bad_reply"]).read_text() == invalid
+    assert not post.responses
+
+
+def test_http_error_at_a_later_step_names_that_step(repo):
+    with pytest.raises(LLMHTTPError):
+        run(repo, INTAKE, LLMHTTPError(401, "invalid api key"))
+    saved = only_log(repo)
+    assert saved["error"].startswith("LLMHTTPError") and saved["failed_step"] == "DraftAgent"
+    assert "bad_reply" not in saved and [s["agent"] for s in saved["steps"]] == ["IntakeAgent"]
+
+
+def test_a_client_without_fallback_attributes_does_not_mask_the_original_error(repo):
+    class BareClient:
+        def chat_structured(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        run_pipeline.run("Write a vacation policy memo", BareClient(), ENV, repo=repo)
+    saved = only_log(repo)
+    assert saved["error"] == "RuntimeError: boom" and saved["failed_step"] == "IntakeAgent"
+    assert "fallback_model_used" not in saved
+
+
+def test_a_failing_log_write_does_not_replace_the_run_error(repo, monkeypatch, capsys):
+    monkeypatch.setattr(run_pipeline, "_live_runs_dir", lambda repo: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(LLMHTTPError):
+        run(repo, LLMHTTPError(401, "invalid api key"))
+    assert "could not write run log: disk full" in capsys.readouterr().out
+
+
+def test_a_failing_log_write_on_a_good_run_propagates(repo, monkeypatch):
+    monkeypatch.setattr(run_pipeline, "_live_runs_dir", lambda repo: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(OSError, match="disk full"):
+        run(repo, INTAKE, draft(GOOD), review(90), PACKAGE)
+
+
+def test_only_the_client_hop_is_unwired_and_every_other_hop_has_a_wire_file(repo):
+    assert run_pipeline.UNWIRED == {"client_to_IntakeAgent"}
+    assert not wires.has_wire("client_to_IntakeAgent")
+    log, _ = run(repo, {**INTAKE, "needs_research": True}, draft(GOOD), review(90), PACKAGE)
+    for step in log["steps"]:
+        assert step["wire"] in run_pipeline.UNWIRED or wires.has_wire(step["wire"])
+
+
+def test_a_missing_wire_file_fails_closed(repo, monkeypatch):
+    monkeypatch.setattr(wires, "WIRES_DIR", repo / "no_wires")
+    with pytest.raises(FileNotFoundError):
+        run(repo, INTAKE, draft(GOOD))
+    assert only_log(repo)["failed_step"] == "DraftAgent"

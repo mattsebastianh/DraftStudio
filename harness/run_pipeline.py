@@ -25,6 +25,7 @@ from harness import checks, config, messages, schemas, wires  # noqa: E402
 from harness.llm import LLMClient, ReplyError, build_messages  # noqa: E402
 from harness.research import run_research  # noqa: E402
 
+UNWIRED = {"client_to_IntakeAgent"}  # the one hop without a wire file: every other hop is validated and must have one
 RESEARCH_CONFIDENCE_FLOOR = 60  # ResearchAgent's escalation rule: below this, flag the run for a human
 
 INTAKE_FORMAT = (
@@ -64,20 +65,28 @@ def run(raw_request, client, env, repo=config.REPO, toolbox=None):
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     log = {"run_id": run_id, "request": raw_request, "model": env["GROQ_PRIMARY_MODEL"], "steps": []}
     print(f"DraftStudio live run {run_id} — model {env['GROQ_PRIMARY_MODEL']}")
+    progress = {"step": None}
+    failed = False
     try:
-        _run_steps(raw_request, client, env, repo, toolbox, log)
+        _run_steps(raw_request, client, env, repo, toolbox, log, progress)
     except Exception as err:
+        failed = True
         log["error"] = f"{type(err).__name__}: {err}"
+        log.setdefault("failed_step", progress["step"])
         print(f"  RUN FAILED: {log['error']}")
         raise
     finally:
-        if client.fallback_model_used:
-            log["fallback_model_used"] = client.fallback_model_used
-        if client.fallback_provider_used:
-            log["fallback_provider_used"] = client.fallback_provider_used
-        log_path = _live_runs_dir(repo) / f"run_{run_id}.json"
-        log_path.write_text(json.dumps(log, indent=2) + "\n")
-        print(f"\nRun log: {log_path.relative_to(repo)}")
+        for key in ("fallback_model_used", "fallback_provider_used"):
+            if getattr(client, key, None):
+                log[key] = getattr(client, key)
+        try:
+            log_path = _live_runs_dir(repo) / f"run_{run_id}.json"
+            log_path.write_text(json.dumps(log, indent=2) + "\n")
+            print(f"\nRun log: {log_path.relative_to(repo)}")
+        except OSError as err:
+            print(f"could not write run log: {err}")
+            if not failed:
+                raise
     if log.get("deliverable"):
         print(f"Deliverable: {log['deliverable']} (final score {log['final_score']})")
     return log
@@ -95,6 +104,15 @@ def _validate(wire, message):
         raise wires.WireContractError(wire, errors)
 
 
+def _save_bad_reply(repo, agent, err, log):
+    """Keep the raw text of a reply that failed validation or was truncated, and record it in the run log."""
+    bad = _live_runs_dir(repo) / f"bad_reply_{agent}_{int(time.time())}.txt"
+    bad.write_text(err.raw or "")
+    log["failed_step"] = agent
+    log["bad_reply"] = str(bad.relative_to(repo))
+    print(f"    raw reply saved to {log['bad_reply']}")
+
+
 def _deliverable_path(repo, title, run_id):
     """deliverables/<slug>.md, or <slug>_<run_id>.md when that file exists: never overwrite a deliverable."""
     slug = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:60] or "deliverable"
@@ -104,12 +122,13 @@ def _deliverable_path(repo, title, run_id):
     return folder / f"{slug}_{run_id}.md" if path.exists() else path
 
 
-def _run_steps(raw_request, client, env, repo, toolbox, log):
+def _run_steps(raw_request, client, env, repo, toolbox, log, progress):
     def system_prompt(agent):
         return (repo / "agents" / agent / "system_prompt.txt").read_text()
 
     def run_agent(agent, wire, message, format_instructions):
-        if wires.has_wire(wire):
+        progress["step"] = agent
+        if wire not in UNWIRED:
             _validate(wire, message)
         user_message = (
             f"Incoming message on wire `{wire}`:\n\n"
@@ -124,26 +143,28 @@ def _run_steps(raw_request, client, env, repo, toolbox, log):
                 build_messages(system_prompt(agent), user_message), schemas.output_schema(agent), agent, max_tokens, effort
             )
         except ReplyError as err:
-            bad = _live_runs_dir(repo) / f"bad_reply_{agent}_{int(time.time())}.txt"
-            bad.write_text(err.raw or "")
-            log["failed_step"] = agent
-            log["bad_reply"] = str(bad.relative_to(repo))
-            print(f"    raw reply saved to {log['bad_reply']}")
+            _save_bad_reply(repo, agent, err, log)
             raise
         log["steps"].append({"agent": agent, "wire": wire, "input": message, "output": parsed, **meta})
         print(f"  {agent} done ({meta['seconds']}s, {meta['usage']['total_tokens']} tokens, {meta['provider']}:{meta['model']})")
         return parsed
 
     print("Step 1: IntakeAgent")
+    progress["step"] = "IntakeAgent"
     intake = run_agent("IntakeAgent", "client_to_IntakeAgent", {"raw_request": raw_request}, INTAKE_FORMAT)
     brief = intake["brief"]
 
     dossier = None
     if intake["needs_research"]:
         print("Step 2: ResearchAgent")
+        progress["step"] = "ResearchAgent"
         message = messages.intake_to_research(brief)
         _validate("IntakeAgent_to_ResearchAgent", message)
-        dossier, meta = run_research(client, env, system_prompt("ResearchAgent"), message, toolbox=toolbox)
+        try:
+            dossier, meta = run_research(client, env, system_prompt("ResearchAgent"), message, toolbox=toolbox)
+        except ReplyError as err:
+            _save_bad_reply(repo, "ResearchAgent", err, log)
+            raise
         _validate("ResearchAgent_to_DraftAgent", dossier)
         log["steps"].append({"agent": "ResearchAgent", "wire": "IntakeAgent_to_ResearchAgent", "input": message, "output": dossier, **meta})
         print(
@@ -156,10 +177,12 @@ def _run_steps(raw_request, client, env, repo, toolbox, log):
             print(f"  note: {note}")
 
     print("Step 3: DraftAgent")
+    progress["step"] = "DraftAgent"
     draft = run_agent("DraftAgent", "IntakeAgent_to_DraftAgent", messages.intake_to_draft(brief, dossier), DRAFT_FORMAT)
 
     for round_num in range(config.MAX_REVISION_CYCLES + 1):
         print(f"Step 4: ReviewAgent (round {round_num})")
+        progress["step"] = "ReviewAgent"
         results = checks.run_checks(brief, draft["draft"]["content"], dossier)
         llm_review = run_agent(
             "ReviewAgent",
@@ -185,6 +208,7 @@ def _run_steps(raw_request, client, env, repo, toolbox, log):
         critical = sum(1 for i in review["issues"] if i.get("severity") == "critical")
         print(f"  revision needed: score {review['score']}, {critical} critical issue(s)")
         print(f"Step 5: DraftAgent (revision {round_num + 1})")
+        progress["step"] = "DraftAgent"
         draft = run_agent(
             "DraftAgent",
             "ReviewAgent_to_DraftAgent",
@@ -193,6 +217,7 @@ def _run_steps(raw_request, client, env, repo, toolbox, log):
         )
 
     print("Step 6: DispatchAgent")
+    progress["step"] = "DispatchAgent"
     dispatch = run_agent(
         "DispatchAgent",
         "ReviewAgent_to_DispatchAgent",
