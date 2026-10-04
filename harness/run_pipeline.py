@@ -47,7 +47,8 @@ REVIEW_FORMAT = (
 )
 REVISE_FORMAT = (
     'Revise the draft to resolve every issue. Return JSON: {"draft": {"title", "content" '
-    '(complete revised deliverable in markdown), "format", "unsupported", "word_count"}}'
+    '(complete revised deliverable in markdown), "format", "unsupported", "word_count"}}. '
+    "If sources are provided, keep citing the sources provided, and do not add sources that are not listed."
 )
 DISPATCH_FORMAT = (
     'Package this approved deliverable. Return JSON: {"package": {"title", "delivery_note" '
@@ -212,7 +213,7 @@ def _run_steps(raw_request, client, env, repo, toolbox, log, progress):
         draft = run_agent(
             "DraftAgent",
             "ReviewAgent_to_DraftAgent",
-            messages.review_to_draft(brief, draft["draft"], review["issues"], round_num + 1),
+            messages.review_to_draft(brief, draft["draft"], review["issues"], round_num + 1, dossier),
             REVISE_FORMAT,
         )
 

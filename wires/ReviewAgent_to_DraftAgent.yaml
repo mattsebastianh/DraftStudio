@@ -1,8 +1,8 @@
 wire:
   id: ReviewAgent_to_DraftAgent
-  version: "1.1"
+  version: "1.2"
   created: 2026-04-13
-  updated: 2026-10-03
+  updated: 2026-10-04
 
 sender:
   agent: ReviewAgent
@@ -66,6 +66,18 @@ message_schema:
             type: string
         word_count:
           type: integer
+    sources:
+      type: array
+      description: "Research sources the draft may cite (urls from the research dossier), so a revision keeps its citations; omitted when no research was done"
+      items:
+        type: object
+        required:
+          - url
+        properties:
+          title:
+            type: string
+          url:
+            type: string
 
 failure_handling:
   on_timeout:
@@ -84,3 +96,4 @@ metadata:
   data_sensitivity: internal
   changelog:
     - "1.1 (2026-10-03): added brief and previous_draft (DraftAgent needs the text it revises); top-level fields closed"
+    - "1.2 (2026-10-04): added optional sources, so a revision that must fix missing citations still has the research sources"

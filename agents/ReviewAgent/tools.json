@@ -136,6 +136,18 @@
             "unsupported": { "type": "array", "items": { "type": "string" } },
             "word_count": { "type": "integer" }
           }
+        },
+        "sources": {
+          "type": "array",
+          "description": "Research sources the draft may cite, so a revision keeps its citations; omitted when no research was done",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "url": { "type": "string" }
+            },
+            "required": ["url"]
+          }
         }
       },
       "required": ["draft_title", "issues", "revision_round"],

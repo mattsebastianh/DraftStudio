@@ -16,14 +16,23 @@ def draft_to_review(brief, draft, round_num, check_results):
     return {"draft": draft, "brief": brief, "revision_round": round_num, "deterministic_checks": check_results}
 
 
-def review_to_draft(brief, draft, issues, round_num):
-    return {
+def _cited_sources(dossier):
+    """The dossier's sources that have a URL (what a draft may cite)."""
+    return [s for s in (dossier or {}).get("sources", []) if s.get("url")]
+
+
+def review_to_draft(brief, draft, issues, round_num, dossier=None):
+    message = {
         "draft_title": draft["title"],
         "issues": issues,
         "revision_round": round_num,
         "brief": brief,
         "previous_draft": draft,
     }
+    sources = _cited_sources(dossier)
+    if sources:
+        message["sources"] = sources
+    return message
 
 
 def review_to_dispatch(draft, review, revision_rounds, dossier=None):
@@ -36,7 +45,7 @@ def review_to_dispatch(draft, review, revision_rounds, dossier=None):
             "review_status": "approved",
         },
     }
-    sources = [s for s in (dossier or {}).get("sources", []) if s.get("url")]
+    sources = _cited_sources(dossier)
     if sources:
         message["sources"] = sources
     return message

@@ -127,6 +127,37 @@ def test_research_with_tools_feeds_a_sourced_dossier_downstream(repo):
     assert "flags" not in log and not post.responses
 
 
+def test_a_revision_after_research_receives_the_sources(repo):
+    env = {**ENV, "SEARCH_API_KEY": "real"}
+    search_body = {"results": [{"title": "Regulation (EU) 2024/1689", "url": REG_URL, "content": "AI Act"}]}
+    dossier = {
+        "topic": "Vacation policy",
+        "findings": [{"claim": "The AI Act is Regulation (EU) 2024/1689", "sources": [REG_URL], "confidence": 90}],
+        "gaps": [],
+        "confidence": 80,
+        "sources": [],
+    }
+    box = tools.ToolBox(env, opener=opener_returning(search_body), resolve=public_resolve)
+    post = FakePost(
+        body(json.dumps({**INTAKE, "needs_research": True})),
+        body("", finish="tool_calls", tool_calls=tool_call("web_search", {"query": "vacation law"})),
+        body("Found the regulation."),
+        body(json.dumps(dossier)),
+        body(json.dumps(draft(GOOD))),  # cites nothing: citations_present fails
+        body(json.dumps(review(70))),
+        body(json.dumps(draft(GOOD + " Source: eur-lex.europa.eu"))),
+        body(json.dumps(review(90))),
+        body(json.dumps(PACKAGE)),
+    )
+    log = run_pipeline.run("Write a vacation policy memo", make_client(post, env), env, repo=repo, toolbox=box)
+    revision = [s for s in log["steps"] if s["agent"] == "DraftAgent"][1]
+    assert revision["wire"] == "ReviewAgent_to_DraftAgent"
+    assert revision["input"]["sources"] == [{"title": "Regulation (EU) 2024/1689", "url": REG_URL}]
+    revision_prompt = post.payloads[6]["messages"][-1]["content"]
+    assert REG_URL in revision_prompt and "do not add sources that are not listed" in revision_prompt
+    assert not post.responses
+
+
 def test_groq_refusal_moves_the_run_to_openrouter(repo):
     denied = LLMHTTPError(403, "Access denied. Please check your network settings.")
     log, post = run(repo, denied, INTAKE, draft(GOOD), review(90), PACKAGE, env=OPENROUTER_ENV)

@@ -68,7 +68,7 @@ def test_agent_outputs_satisfy_downstream_wires():
         ("ResearchAgent_to_DraftAgent", dossier),
         ("IntakeAgent_to_DraftAgent", messages.intake_to_draft(brief, dossier)),
         ("DraftAgent_to_ReviewAgent", messages.draft_to_review(brief, draft, 0, [])),
-        ("ReviewAgent_to_DraftAgent", messages.review_to_draft(brief, draft, review["issues"], 1)),
+        ("ReviewAgent_to_DraftAgent", messages.review_to_draft(brief, draft, review["issues"], 1, dossier)),
         ("ReviewAgent_to_DispatchAgent", messages.review_to_dispatch(draft, review, 0, dossier)),
     ]
     for wire_id, message in hops:

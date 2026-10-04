@@ -39,6 +39,21 @@ def test_review_to_draft_includes_title_and_previous_draft():
     assert_valid("ReviewAgent_to_DraftAgent", msg)
 
 
+def test_review_to_draft_carries_the_research_sources():
+    issues = [{"severity": "high", "description": "no citations", "suggested_fix": "cite"}]
+    dossier = {"sources": [{"title": "EUR-Lex", "url": "https://eur-lex.europa.eu/x"}, {"title": "no url"}]}
+    msg = messages.review_to_draft(BRIEF, DRAFT, issues, 1, dossier)
+    assert msg["sources"] == [{"title": "EUR-Lex", "url": "https://eur-lex.europa.eu/x"}]
+    assert_valid("ReviewAgent_to_DraftAgent", msg)
+
+
+def test_review_to_draft_without_research_has_no_sources():
+    for dossier in (None, {"sources": []}, {"sources": [{"title": "no url"}]}):
+        msg = messages.review_to_draft(BRIEF, DRAFT, [], 1, dossier)
+        assert "sources" not in msg
+        assert_valid("ReviewAgent_to_DraftAgent", msg)
+
+
 def test_review_to_dispatch_carries_draft_rounds_and_sources():
     review = {"score": 88, "dimension_scores": {"clarity": 90}}
     dossier = {"sources": [{"title": "EUR-Lex", "url": "https://eur-lex.europa.eu/x"}, {"title": "no url"}]}
