@@ -153,13 +153,13 @@ Every agent defines: Role, Goal, Backstory, Tools, Constraints, and Escalation r
 
 All 5 agents are built, reviewed, pipeline-tested, and **active**. The full wire map (9 wires) passed static integration testing — see `tests/pipeline_test_results.md`.
 
-**Live execution is verified.** Eight live end-to-end runs against the Groq API have completed (scores 85–94/100), including real client-style draft requests delivered through the full pipeline. The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. One known gap: the ReviewAgent → DraftAgent revision loop and 3-cycle escalation have never fired live — every run so far has been approved on round 0 (run logs are kept locally in `tests/live_runs/`).
+**Live execution is verified.** Live end-to-end runs against the Groq and OpenRouter APIs have completed with real client-style requests (scores 72–94/100). The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. After the 2026-10 harness modernization (schema-validated hops, real web research, code-computed review verdict), the ReviewAgent → DraftAgent revision loop and the 3-cycle human escalation have both fired live: most requests were approved after one revision, and a strict-citation brief exhausted its three cycles and escalated with no deliverable (run logs are kept locally in `tests/live_runs/`).
 
 **n8n workflow:** imported into a local n8n 2.x and run live (Telegram in and out, the revision loop, a Groq 429 with model fallback). Unlike the harness, the revision loop has fired live there. Webhook authentication is verified live (no key and a wrong key get 403, the right key runs the pipeline), and a full run with the stricter gate escalated correctly. The Groq reviewer fallback and the failure branches are built and unit-tested but not yet run live; see the status table in the design doc.
 
 **Provider fallback:** the harness switches to OpenRouter when Groq fails (checked live by forcing an invalid Groq key) and the n8n workflow gives every agent two providers. The unit tests (`.venv/bin/pytest`) cover the wiring, the wire contracts, the harness fallbacks and the review checks.
 
-Planned v2 work: priority handling at intake, `client_id` propagation, multi-channel delivery, and a trap brief that forces a sub-80 round-0 score to finally exercise the revision loop live.
+Planned work: priority handling at intake, `client_id` propagation, multi-channel delivery, giving ReviewAgent the research dossier so it can verify citations, and a second web-search provider behind the same tool interface.
 
 ## Design Principles
 
