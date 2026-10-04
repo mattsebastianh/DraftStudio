@@ -132,3 +132,20 @@ def test_citations_with_non_dict_sources():
     }
     # Should not raise; should still look for citations.
     assert not check({}, GOOD, dossier)["citations_present"].passed
+
+
+def test_malformed_numbers_do_not_raise():
+    """Malformed number patterns should skip the check without raising ValueError."""
+    for length in ["3.2.1 words", "1... words", "words"]:
+        r = check({"length": length}, "w " * 999)["length"]
+        assert r.passed, f"Expected pass for '{length}', got {r}"
+
+
+def test_constraint_search_includes_text_after_match():
+    """at-most/at-least hints after the match should be recognized."""
+    # "150 words max" -> max applies to 150 (text after match).
+    assert check({"length": "150 words max"}, "w " * 100)["length"].passed
+    assert not check({"length": "150 words max"}, "w " * 400)["length"].passed
+    # "at least 300 words" still works (text before match).
+    assert not check({"length": "at least 300 words"}, "w " * 200)["length"].passed
+    assert check({"length": "at least 300 words"}, "w " * 300)["length"].passed

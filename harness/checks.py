@@ -12,7 +12,7 @@ PLACEHOLDER_RE = re.compile(
     r"(?-i:\bTODO\b|\bTBD\b|\bXXX\b)|lorem ipsum|\[\s*(?:insert|your|link|url|company name|name|date)\b[^\]]*\](?!\()",
     re.IGNORECASE,
 )
-_UNIT_SPAN_RE = re.compile(r"(\d[\d,.]*k?)\s*(?:(?:-|–|—|to)\s*(\d[\d,.]*k?)\s*)?(words?|characters?|chars?)\b", re.IGNORECASE)
+_UNIT_SPAN_RE = re.compile(r"(\d+(?:[,.]\d+)*k?)\s*(?:(?:-|–|—|to)\s*(\d+(?:[,.]\d+)*k?)\s*)?(words?|characters?|chars?)\b", re.IGNORECASE)
 _AT_MOST_RE = re.compile(r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno more than\b|\bat most\b|\bunder\b", re.IGNORECASE)
 _AT_LEAST_RE = re.compile(r"≥|>=|\bmin(?:imum)?\b|\bat least\b|\bno (?:less|fewer) than\b", re.IGNORECASE)
 
@@ -75,20 +75,28 @@ def _length_target(length):
     unit_str = match.group(3).lower()
     unit = "characters" if unit_str[0] == "c" else "words"
 
-    # Parse numbers: handle 'k' suffix and commas.
-    num1 = _parse_number(match.group(1))
+    # Parse numbers: handle 'k' suffix and commas. Return None if parsing fails.
+    try:
+        num1 = _parse_number(match.group(1))
+    except ValueError:
+        return None
     num2 = match.group(2)
 
     if num2:
         # Range: two numbers.
-        num2 = _parse_number(num2)
+        try:
+            num2 = _parse_number(num2)
+        except ValueError:
+            return None
         low, high = sorted([num1, num2])
     else:
-        # Single number: apply at-most/at-least only to text BEFORE the match.
+        # Single number: apply at-most/at-least to text before and up to 12 chars after the match.
         text_before = text[:match.start()]
-        if _AT_MOST_RE.search(text_before):
+        text_after = text[match.end():match.end() + 12]
+        search_text = text_before + " " + text_after
+        if _AT_MOST_RE.search(search_text):
             low, high = 0, num1
-        elif _AT_LEAST_RE.search(text_before):
+        elif _AT_LEAST_RE.search(search_text):
             low, high = num1, None
         else:
             # Exact target.
