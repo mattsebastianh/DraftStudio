@@ -12,10 +12,7 @@ PLACEHOLDER_RE = re.compile(
     r"(?-i:\bTODO\b|\bTBD\b|\bXXX\b)|lorem ipsum|\[\s*(?:insert|your|link|url|company name|name|date)\b[^\]]*\](?!\()",
     re.IGNORECASE,
 )
-_RANGE_RE = re.compile(r"(\d[\d,]*)\s*(?:-|–|—|to)\s*(\d[\d,]*)")
-_NUMBER_RE = re.compile(r"\d[\d,]*")
-_CHARACTERS_RE = re.compile(r"\b(?:characters?|chars?)\b", re.IGNORECASE)
-_WORDS_RE = re.compile(r"\bwords?\b", re.IGNORECASE)
+_UNIT_SPAN_RE = re.compile(r"(\d[\d,.]*k?)\s*(?:(?:-|–|—|to)\s*(\d[\d,.]*k?)\s*)?(words?|characters?|chars?)\b", re.IGNORECASE)
 _AT_MOST_RE = re.compile(r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno more than\b|\bat most\b|\bunder\b", re.IGNORECASE)
 _AT_LEAST_RE = re.compile(r"≥|>=|\bmin(?:imum)?\b|\bat least\b|\bno (?:less|fewer) than\b", re.IGNORECASE)
 
@@ -44,35 +41,59 @@ def _passed(check_id, detail="ok"):
     return CheckResult(check_id, True, "low", detail)
 
 
+def _parse_number(num_str):
+    """Parse a number string, handling commas and 'k' suffix (e.g. '1.5k' -> 1500)."""
+    num_str = num_str.replace(",", "").lower()
+    value = float(num_str.rstrip("k"))
+    if num_str.endswith("k"):
+        value *= 1000
+    return int(value)
+
+
 def _length_target(length):
     """(unit, low, high) with the tolerance applied; high is None for "at least N".
 
     None when the brief gives no word or character count ("1-2 pages", "short").
+    Binds numbers directly to unit words (words/characters/chars).
     """
     if isinstance(length, bool) or not isinstance(length, (int, str)):
         return None
+
+    # Handle integer lengths: must be > 0, treated as words.
     if isinstance(length, int):
-        unit, text = "words", str(length)
-    elif _CHARACTERS_RE.search(length):
-        unit, text = "characters", length
-    elif _WORDS_RE.search(length):
-        unit, text = "words", length
-    else:
-        return None
-    span = _RANGE_RE.search(text)
-    if span:
-        low, high = sorted(int(n.replace(",", "")) for n in span.groups())
-    else:
-        number = _NUMBER_RE.search(text)
-        if not number:
+        if length <= 0:
             return None
-        value = int(number.group(0).replace(",", ""))
-        if _AT_MOST_RE.search(text):
-            low, high = 0, value
-        elif _AT_LEAST_RE.search(text):
-            low, high = value, None
+        return "words", int(length * (1 - config.LENGTH_TOLERANCE)), math.ceil(length * (1 + config.LENGTH_TOLERANCE))
+
+    # Find a unit-bound number: (number) [number] (unit).
+    text = str(length)
+    match = _UNIT_SPAN_RE.search(text)
+    if not match:
+        return None
+
+    # Determine unit (characters or words).
+    unit_str = match.group(3).lower()
+    unit = "characters" if unit_str[0] == "c" else "words"
+
+    # Parse numbers: handle 'k' suffix and commas.
+    num1 = _parse_number(match.group(1))
+    num2 = match.group(2)
+
+    if num2:
+        # Range: two numbers.
+        num2 = _parse_number(num2)
+        low, high = sorted([num1, num2])
+    else:
+        # Single number: apply at-most/at-least only to text BEFORE the match.
+        text_before = text[:match.start()]
+        if _AT_MOST_RE.search(text_before):
+            low, high = 0, num1
+        elif _AT_LEAST_RE.search(text_before):
+            low, high = num1, None
         else:
-            low = high = value
+            # Exact target.
+            low = high = num1
+
     tol = config.LENGTH_TOLERANCE
     return unit, int(low * (1 - tol)), None if high is None else math.ceil(high * (1 + tol))
 
@@ -140,10 +161,13 @@ def check_citations(content, dossier):
         return _passed("citations_present", "no research sources to cite")
     lowered = content.lower()
     for src in sources:
-        url = src.get("url", "")
-        host = (urlparse(url).hostname or "").lower().removeprefix("www.")
-        title = (src.get("title") or "").lower()
-        if (url and url.lower() in lowered) or (host and host in lowered) or (title and title in lowered):
+        # Guard: skip non-dict entries; treat None url/title as empty.
+        if not isinstance(src, dict):
+            continue
+        url = (src.get("url") or "") if src.get("url") is not None else ""
+        host = (urlparse(url).hostname or "").lower().removeprefix("www.") if url else ""
+        title = (src.get("title") or "") if src.get("title") is not None else ""
+        if (url and url.lower() in lowered) or (host and host in lowered) or (title and title.lower() in lowered):
             return _passed("citations_present")
     return CheckResult(
         "citations_present",

@@ -98,3 +98,37 @@ def test_as_issue_and_as_dict():
     assert set(issue) == {"severity", "category", "description", "suggested_fix"}
     assert issue["category"] == "deterministic:no_placeholders"
     assert r.as_dict()["passed"] is False
+
+
+def test_length_binds_numbers_to_unit_words():
+    """Numbers must be bound to the unit word, not taken as first occurrence."""
+    # "2 paragraphs, about 120 words" -> should parse as ~120 words, not 2.
+    assert check({"length": "2 paragraphs, about 120 words"}, "w " * 120)["length"].passed
+    # "Max 2 paragraphs, 150 words" -> should parse as ≤150 words, not ≤2.
+    assert check({"length": "Max 2 paragraphs, 150 words"}, "w " * 150)["length"].passed
+    assert not check({"length": "Max 2 paragraphs, 150 words"}, "w " * 400)["length"].passed
+    # "1–2 pages, ~600 words" -> should parse as ~600 words, not 1-2.
+    assert check({"length": "1–2 pages, ~600 words"}, "w " * 600)["length"].passed
+    # "about 1.5k words" -> should parse as ~1500 words.
+    assert check({"length": "about 1.5k words"}, "w " * 1500)["length"].passed
+    # "1,500-2,500 words" -> should parse as 1500-2500 words.
+    assert check({"length": "1,500-2,500 words"}, "w " * 2000)["length"].passed
+
+
+def test_length_zero_or_negative_is_skipped():
+    """Integer lengths <= 0 should be skipped (pass the check)."""
+    assert check({"length": 0}, "w " * 999)["length"].passed
+    assert check({"length": -5}, "w " * 999)["length"].passed
+
+
+def test_citations_with_non_dict_sources():
+    """Non-dict entries and None values in sources should not raise."""
+    dossier = {
+        "sources": [
+            "https://a.com",  # String instead of dict.
+            None,  # None entry.
+            {"url": None, "title": None},  # Dict with None values.
+        ]
+    }
+    # Should not raise; should still look for citations.
+    assert not check({}, GOOD, dossier)["citations_present"].passed
