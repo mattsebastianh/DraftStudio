@@ -1,3 +1,5 @@
+import pytest
+
 from harness import checks
 
 GOOD = "# Vacation Policy\n\nEvery employee receives 25 days of paid vacation each year and may carry over five unused days."
@@ -149,3 +151,67 @@ def test_constraint_search_includes_text_after_match():
     # "at least 300 words" still works (text before match).
     assert not check({"length": "at least 300 words"}, "w " * 200)["length"].passed
     assert check({"length": "at least 300 words"}, "w " * 300)["length"].passed
+
+
+def _passes(length, size, unit="w "):
+    return check({"length": length}, unit * size)["length"].passed
+
+
+@pytest.mark.parametrize(
+    "length, unit, limit",
+    [
+        ("less than 200 words", "w ", 200),
+        ("fewer than 280 characters", "x", 280),
+        ("280 characters or less", "x", 280),
+        ("within 280 characters", "x", 280),
+        ("not exceeding 280 characters", "x", 280),
+        ("no longer than 150 words", "w ", 150),
+        ("below 300 words", "w ", 300),
+        ("300 words or fewer", "w ", 300),
+        ("not more than 300 words", "w ", 300),
+        ("≤ 270 characters", "x", 270),
+        ("Maximum 380 words total", "w ", 380),
+    ],
+)
+def test_ceilings_have_no_tolerance_above_the_stated_number(length, unit, limit):
+    assert _passes(length, limit - 80, unit)
+    assert _passes(length, limit, unit)
+    assert not _passes(length, limit + 1, unit)
+
+
+@pytest.mark.parametrize("length", ["more than 500 words", "over 500 words", "500 words or more", "above 500 words", "no less than 500 words"])
+def test_floors_phrased_in_other_ways(length):
+    assert _passes(length, 900)
+    assert not _passes(length, 300)
+
+
+def test_between_x_and_y_is_a_range_with_tolerance():
+    assert _passes("between 200 and 300 words", 250)
+    assert _passes("between 200 and 300 words", 220)
+    assert _passes("between 200 and 300 words", 175)  # 200 * 0.85 = 170
+    assert not _passes("between 200 and 300 words", 100)
+    assert not _passes("between 200 and 300 words", 500)
+
+
+@pytest.mark.parametrize(
+    "length",
+    ["2 paragraphs (~150 words each)", "2 paragraphs of 150 words", "150 words per section", "each section about 150 words", "3 sentences of at most 20 words"],
+)
+def test_per_item_counts_are_skipped(length):
+    assert _passes(length, 999)
+    assert _passes(length, 3)
+
+
+def test_a_ceiling_is_exact_for_characters():
+    assert _passes("≤ 270 characters", 270, "x")
+    assert not _passes("≤ 270 characters", 271, "x")
+
+
+def test_weak_hint_words_elsewhere_in_the_text_are_not_ceilings():
+    assert not _passes("a post over email, exactly 500 words", 100)  # exact target, not "over 500"
+    assert not _passes("within a week, 500 words", 900)  # "within" is not next to the count
+
+
+@pytest.mark.parametrize("length", ["9" * 309 + " words", "1" + "0" * 310 + "k words", "9" * 400 + "-" + "1" * 400 + " characters", "between 1" + "0" * 320 + " and 5 words"])
+def test_absurd_numbers_skip_the_check_instead_of_raising(length):
+    assert check({"length": length}, "w " * 50)["length"].passed

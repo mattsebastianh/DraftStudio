@@ -13,8 +13,26 @@ PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 _UNIT_SPAN_RE = re.compile(r"(\d+(?:[,.]\d+)*k?)\s*(?:(?:-|–|—|to)\s*(\d+(?:[,.]\d+)*k?)\s*)?(words?|characters?|chars?)\b", re.IGNORECASE)
-_AT_MOST_RE = re.compile(r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno more than\b|\bat most\b|\bunder\b", re.IGNORECASE)
-_AT_LEAST_RE = re.compile(r"≥|>=|\bmin(?:imum)?\b|\bat least\b|\bno (?:less|fewer) than\b", re.IGNORECASE)
+_NUMBER = r"\d+(?:[,.]\d+)*k?"
+_BETWEEN_RE = re.compile(rf"\bbetween\s+({_NUMBER})\s+and\s+({_NUMBER})\s*(words?|characters?|chars?)\b", re.IGNORECASE)
+# Hints that bind anywhere in the text before the count ("Max 2 paragraphs, 150 words"), or right after it.
+_AT_MOST_RE = re.compile(
+    r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno (?:more|longer) than\b|\bnot (?:more than|exceed(?:ing)?)\b|\bat most\b|\bunder\b",
+    re.IGNORECASE,
+)
+_AT_LEAST_RE = re.compile(r"≥|>=|\bmin(?:imum)?\b|\bat least\b|\b(?:no|not) (?:less|fewer) than\b", re.IGNORECASE)
+# Weaker words only count when they sit directly before the count ("less than 200 words") or after it ("or fewer").
+_AT_MOST_BEFORE_RE = re.compile(r"(?<!no )(?<!not )\b(?:less than|fewer than|below|within)\s*(?:about\s+|around\s+|~\s*)?$", re.IGNORECASE)
+_AT_LEAST_BEFORE_RE = re.compile(r"\b(?:more than|over|above|exceeds?)\s*(?:about\s+|around\s+|~\s*)?$", re.IGNORECASE)
+_AT_MOST_AFTER_RE = re.compile(r"^\s*or\s+(?:less|fewer)\b", re.IGNORECASE)
+_AT_LEAST_AFTER_RE = re.compile(r"^\s*or\s+more\b", re.IGNORECASE)
+# A count that applies to each part ("~150 words each", "per section", "2 paragraphs of 150 words") is no total.
+_PER_ITEM_AFTER_RE = re.compile(r"^[\s)\],.;:]*(?:each|apiece|per\b|/)", re.IGNORECASE)
+_PER_ITEM_BEFORE_RE = re.compile(
+    r"(?:\b(?:each|every)\b[^,;.]{0,20}|\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+[a-z]+s\s+(?:of|at)\s+(?:[a-z~]+\s+){0,2})$",
+    re.IGNORECASE,
+)
+MAX_PLAUSIBLE_COUNT = 10**12
 
 
 @dataclass
@@ -47,11 +65,16 @@ def _parse_number(num_str):
     value = float(num_str.rstrip("k"))
     if num_str.endswith("k"):
         value *= 1000
-    return int(value)
+    if value > MAX_PLAUSIBLE_COUNT:
+        raise ValueError("count too large to be a length")
+    return int(value)  # OverflowError for inf
 
 
 def _length_target(length):
     """(unit, low, high) with the tolerance applied; high is None for "at least N".
+
+    An explicit ceiling ("at most N", "less than N", "N or fewer") gets no tolerance above it. Counts that
+    apply per part ("150 words each", "2 paragraphs of 150 words") give no total and are skipped.
 
     None when the brief gives no word or character count ("1-2 pages", "short").
     Binds numbers directly to unit words (words/characters/chars).
@@ -65,45 +88,38 @@ def _length_target(length):
             return None
         return "words", int(length * (1 - config.LENGTH_TOLERANCE)), math.ceil(length * (1 + config.LENGTH_TOLERANCE))
 
-    # Find a unit-bound number: (number) [number] (unit).
+    # Find a unit-bound count: "between X and Y <unit>", or (number) [number] (unit).
     text = str(length)
-    match = _UNIT_SPAN_RE.search(text)
+    between = _BETWEEN_RE.search(text)
+    match = between or _UNIT_SPAN_RE.search(text)
     if not match:
         return None
+    text_before = text[: match.start()]
+    text_after = text[match.end() :]
+    if _PER_ITEM_AFTER_RE.search(text_after[:16]) or _PER_ITEM_BEFORE_RE.search(text_before):
+        return None
 
-    # Determine unit (characters or words).
     unit_str = match.group(3).lower()
     unit = "characters" if unit_str[0] == "c" else "words"
 
-    # Parse numbers: handle 'k' suffix and commas. Return None if parsing fails.
     try:
         num1 = _parse_number(match.group(1))
-    except ValueError:
+        num2 = _parse_number(match.group(2)) if match.group(2) else None
+    except (ValueError, OverflowError):
         return None
-    num2 = match.group(2)
-
-    if num2:
-        # Range: two numbers.
-        try:
-            num2 = _parse_number(num2)
-        except ValueError:
-            return None
-        low, high = sorted([num1, num2])
-    else:
-        # Single number: apply at-most/at-least to text before and up to 12 chars after the match.
-        text_before = text[:match.start()]
-        text_after = text[match.end():match.end() + 12]
-        search_text = text_before + " " + text_after
-        if _AT_MOST_RE.search(search_text):
-            low, high = 0, num1
-        elif _AT_LEAST_RE.search(search_text):
-            low, high = num1, None
-        else:
-            # Exact target.
-            low = high = num1
 
     tol = config.LENGTH_TOLERANCE
-    return unit, int(low * (1 - tol)), None if high is None else math.ceil(high * (1 + tol))
+    if num2 is not None:
+        low, high = sorted([num1, num2])
+        return unit, int(low * (1 - tol)), math.ceil(high * (1 + tol))
+    # Single number: hints before the match or just after it.
+    near_after = text_after[:12]
+    search_text = text_before + " " + near_after
+    if _AT_MOST_RE.search(search_text) or _AT_MOST_BEFORE_RE.search(text_before) or _AT_MOST_AFTER_RE.search(near_after):
+        return unit, 0, num1  # an explicit ceiling gets no tolerance above it
+    if _AT_LEAST_RE.search(search_text) or _AT_LEAST_BEFORE_RE.search(text_before) or _AT_LEAST_AFTER_RE.search(near_after):
+        return unit, int(num1 * (1 - tol)), None
+    return unit, int(num1 * (1 - tol)), math.ceil(num1 * (1 + tol))  # exact target
 
 
 def check_length(brief, content):
