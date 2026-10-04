@@ -59,3 +59,38 @@ def test_input_review_is_not_mutated():
     review = dict(REVIEW, issues=[])
     checks.finalize_review(review, results_for("TODO"), 80)
     assert review["issues"] == []
+
+
+def _clean(review):
+    return checks.finalize_review(review, results_for("# T\n\nfine"), 80)
+
+
+def test_severity_match_ignores_case_and_whitespace():
+    for severity in ("Critical", " critical ", "CRITICAL"):
+        review = dict(REVIEW, issues=[{"severity": severity, "description": "x", "suggested_fix": "y"}])
+        assert _clean(review)["status"] == "revision_required"
+
+
+def test_non_dict_issue_fails_closed():
+    assert _clean(dict(REVIEW, issues=["bad"]))["status"] == "revision_required"
+
+
+def test_invalid_score_is_malformed_and_blocks():
+    missing = {key: value for key, value in REVIEW.items() if key != "score"}
+    for review in (missing, dict(REVIEW, score=None), dict(REVIEW, score="90/100"), dict(REVIEW, score=float("nan")), dict(REVIEW, score=True)):
+        out = _clean(review)
+        assert out["status"] == "revision_required"
+        assert out["score"] == 0
+        assert any(i["severity"] == "critical" and i["category"] == "malformed_review" for i in out["issues"])
+
+
+def test_malformed_issues_are_treated_as_no_llm_issues():
+    for bad in (None, "oops"):
+        out = _clean(dict(REVIEW, issues=bad))
+        assert out["status"] == "approved"
+        assert out["issues"] == []
+
+
+def test_score_is_compared_without_truncation():
+    assert _clean(dict(REVIEW, score=79.9))["status"] == "revision_required"
+    assert _clean(dict(REVIEW, score=80.0))["status"] == "approved"

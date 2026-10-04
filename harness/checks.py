@@ -205,15 +205,38 @@ def run_checks(brief, content, dossier):
     ]
 
 
+def _is_critical(issue):
+    """A non-dict issue counts as critical so malformed reviews fail closed."""
+    if not isinstance(issue, dict):
+        return True
+    return str(issue.get("severity", "")).strip().lower() == "critical"
+
+
 def finalize_review(llm_review, results, threshold):
-    """Merge deterministic results into the LLM review and compute the verdict in code."""
-    issues = list(llm_review.get("issues", []))
+    """Merge deterministic results into the LLM review and compute the verdict in code.
+
+    Never raises on a malformed review: an invalid score or issue list fails closed.
+    """
+    llm_issues = llm_review.get("issues")
+    issues = list(llm_issues) if isinstance(llm_issues, list) else []
     issues += [r.as_issue() for r in results if not r.passed]
-    has_critical = any(isinstance(i, dict) and i.get("severity") == "critical" for i in issues)
-    status = "approved" if int(llm_review["score"]) >= threshold and not has_critical else "revision_required"
+    score = llm_review.get("score")
+    score_valid = isinstance(score, (int, float)) and not isinstance(score, bool) and not math.isnan(score)
+    if not score_valid:
+        score = 0
+        issues.append(
+            {
+                "severity": "critical",
+                "category": "malformed_review",
+                "description": "ReviewAgent returned a missing or non-numeric score.",
+                "suggested_fix": "Re-run the review and return a numeric 0-100 score.",
+            }
+        )
+    status = "approved" if score >= threshold and not any(_is_critical(i) for i in issues) else "revision_required"
     llm_status = llm_review.get("status")
     return {
         **llm_review,
+        "score": score,
         "issues": issues,
         "status": status,
         "checks": [r.as_dict() for r in results],

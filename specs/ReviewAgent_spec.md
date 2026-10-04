@@ -93,7 +93,7 @@ Every deliverable the agency produces must pass a quality gate before reaching t
     "status": "revision_required",
     "score": 72,
     "dimension_scores": { "clarity": 84, "accuracy": 68, "completeness": 60, "tone_alignment": 82 },
-    "requirements_check": [
+    "requirements": [
       { "requirement": "risk tiers", "passed": true },
       { "requirement": "SMB exemptions", "passed": true },
       { "requirement": "documentation requirements", "passed": false, "note": "Only briefly mentioned, needs dedicated section" },
@@ -118,8 +118,7 @@ Every deliverable the agency produces must pass a quality gate before reaching t
         "description": "Unsupported claim about compliance costs",
         "suggested_fix": "Either remove the cost estimate or clearly mark as editorial estimate with disclaimer"
       }
-    ],
-    "approved": false
+    ]
   }
 }
 ```
