@@ -11,7 +11,7 @@ HARNESS_WIRES = {
     "IntakeAgent_to_ResearchAgent": "1.1",
     "ResearchAgent_to_DraftAgent": "1.1",
     "IntakeAgent_to_DraftAgent": "1.1",
-    "DraftAgent_to_ReviewAgent": "1.1",
+    "DraftAgent_to_ReviewAgent": "1.2",
     "ReviewAgent_to_DraftAgent": "1.2",
     "ReviewAgent_to_DispatchAgent": "1.2",
 }

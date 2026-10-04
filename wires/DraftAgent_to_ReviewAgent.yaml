@@ -1,8 +1,8 @@
 wire:
   id: DraftAgent_to_ReviewAgent
-  version: "1.1"
+  version: "1.2"
   created: 2026-04-13
-  updated: 2026-10-03
+  updated: 2026-10-04
 
 sender:
   agent: DraftAgent
@@ -61,6 +61,9 @@ message_schema:
       type: integer
       description: "Current revision cycle (0 = first review)"
       example: 0
+    dossier:
+      type: object
+      description: "Research dossier (ResearchAgent_to_DraftAgent shape), present only when research ran; lets ReviewAgent verify claims and citations"
     deterministic_checks:
       type: array
       description: "Rule-based check results computed by the harness before review (length, key points, placeholders, citations, format)"
@@ -101,3 +104,4 @@ metadata:
   data_sensitivity: internal
   changelog:
     - "1.1 (2026-10-03): added deterministic_checks (computed by the harness); top-level fields closed"
+    - "1.2 (2026-10-04): added optional dossier so ReviewAgent can verify claims and citations against the research"

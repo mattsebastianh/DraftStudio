@@ -12,8 +12,11 @@ def intake_to_draft(brief, dossier):
     return message
 
 
-def draft_to_review(brief, draft, round_num, check_results):
-    return {"draft": draft, "brief": brief, "revision_round": round_num, "deterministic_checks": check_results}
+def draft_to_review(brief, draft, round_num, check_results, dossier=None):
+    message = {"draft": draft, "brief": brief, "revision_round": round_num, "deterministic_checks": check_results}
+    if dossier is not None:
+        message["dossier"] = dossier
+    return message
 
 
 def _cited_sources(dossier):

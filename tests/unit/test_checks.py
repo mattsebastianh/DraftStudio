@@ -123,6 +123,27 @@ def test_length_zero_or_negative_is_skipped():
     assert check({"length": -5}, "w " * 999)["length"].passed
 
 
+def test_citations_match_sources_by_name():
+    dossier = {
+        "sources": [
+            {"title": "Europe Electric Vehicle Charging Infrastructure Market Size", "url": "https://www.gminsights.com/industry-analysis/x"},
+            {"title": "EV charging outlook", "url": "https://finance.yahoo.com/news/ev-charging"},
+        ]
+    }
+    assert check({}, GOOD + "\nSource: GM Insights 2025", dossier)["citations_present"].passed
+    assert check({}, GOOD + "\nSource: Yahoo Finance 2024", dossier)["citations_present"].passed
+    assert check({}, GOOD + "\nSource: europe electric vehicle charging infrastructure market size", dossier)["citations_present"].passed
+    assert not check({}, GOOD + "\nSource: Reuters 2024", dossier)["citations_present"].passed
+
+
+def test_citation_label_matches_for_country_domains_but_not_short_labels():
+    assert checks._host_label("bbc.co.uk") == "bbc" and checks._host_label("finance.yahoo.com") == "yahoo"
+    paper = {"sources": [{"title": "Report", "url": "https://www.theguardian.co.uk/news/1"}]}
+    assert check({}, GOOD + " per The Guardian", paper)["citations_present"].passed
+    ft = {"sources": [{"title": "Market report", "url": "https://www.ft.com/content/1"}]}
+    assert not check({}, GOOD + " the draft is soft on the facts", ft)["citations_present"].passed
+
+
 def test_citations_with_non_dict_sources():
     """Non-dict entries and None values in sources should not raise."""
     dossier = {
@@ -215,3 +236,4 @@ def test_weak_hint_words_elsewhere_in_the_text_are_not_ceilings():
 @pytest.mark.parametrize("length", ["9" * 309 + " words", "1" + "0" * 310 + "k words", "9" * 400 + "-" + "1" * 400 + " characters", "between 1" + "0" * 320 + " and 5 words"])
 def test_absurd_numbers_skip_the_check_instead_of_raising(length):
     assert check({"length": length}, "w " * 50)["length"].passed
+

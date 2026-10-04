@@ -278,6 +278,10 @@
           "type": "integer",
           "description": "Current revision cycle (0 = first submission)"
         },
+        "dossier": {
+          "type": "object",
+          "description": "Research dossier (ResearchAgent_to_DraftAgent shape), present only when research ran; lets ReviewAgent verify claims and citations"
+        },
         "deterministic_checks": {
           "type": "array",
           "description": "Rule-based check results computed by the harness before review",

@@ -56,7 +56,8 @@ REVIEW_FORMAT = (
 REVISE_FORMAT = (
     'Revise the draft to resolve every issue. Return JSON: {"draft": {"title", "content" '
     '(complete revised deliverable in markdown), "format", "unsupported", "word_count"}}. '
-    "If sources are provided, keep citing the sources provided, and do not add sources that are not listed."
+    "If sources are provided, keep citing the sources provided, and do not add sources that are not listed. "
+    "Keep the length the brief requires (do not shorten the draft below its word range while fixing issues)."
 )
 DISPATCH_FORMAT = (
     'Package this approved deliverable. Return JSON: {"package": {"title", "delivery_note" '
@@ -196,7 +197,7 @@ def _run_steps(raw_request, client, env, repo, toolbox, log, progress):
         llm_review = run_agent(
             "ReviewAgent",
             "DraftAgent_to_ReviewAgent",
-            messages.draft_to_review(brief, draft["draft"], round_num, [r.as_dict() for r in results]),
+            messages.draft_to_review(brief, draft["draft"], round_num, [r.as_dict() for r in results], dossier),
             REVIEW_FORMAT,
         )
         review = checks.finalize_review(llm_review, results, config.QUALITY_THRESHOLD)

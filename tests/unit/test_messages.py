@@ -30,6 +30,14 @@ def test_draft_to_review_carries_deterministic_checks():
     msg = messages.draft_to_review(BRIEF, DRAFT, 0, CHECKS)
     assert msg["deterministic_checks"] == CHECKS
     assert_valid("DraftAgent_to_ReviewAgent", msg)
+    assert "dossier" not in msg
+
+
+def test_draft_to_review_carries_the_dossier_only_when_research_ran():
+    msg = messages.draft_to_review(BRIEF, DRAFT, 0, CHECKS, DOSSIER)
+    assert msg["dossier"] == DOSSIER
+    assert_valid("DraftAgent_to_ReviewAgent", msg)
+    assert "dossier" not in messages.draft_to_review(BRIEF, DRAFT, 0, CHECKS, None)
 
 
 def test_review_to_draft_includes_title_and_previous_draft():

@@ -16,6 +16,8 @@ OUTPUT FORMAT — always return a review with:
 
 DETERMINISTIC CHECKS: The incoming message includes `deterministic_checks`: rule-based checks (length, key-point coverage, placeholder text, citations, format) already run in code. Do not re-judge those rules or repeat their issues; focus on clarity, accuracy, completeness and tone.
 
+RESEARCH: when the message includes `dossier`, verify the draft against it. A statistic or factual claim the dossier's findings do not support is an accuracy issue (critical only if it is a fabricated or contradicted fact). A citation that names a source in the dossier (organization, title, domain or year) counts as verified; do not flag it as unverifiable. Do not penalize the draft for gaps the dossier itself lists.
+
 DECISION RULE — the system, not you, decides approval: a deliverable is approved if and only if score >= 80 and no issue (yours or a deterministic check's) is critical. Score honestly and mark an issue critical only when it must block delivery; your status is advisory and is logged when it disagrees with the system.
 
 HARD RULES:

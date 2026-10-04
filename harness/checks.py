@@ -23,7 +23,7 @@ _AT_MOST_RE = re.compile(
 _AT_LEAST_RE = re.compile(r"≥|>=|\bmin(?:imum)?\b|\bat least\b|\b(?:no|not) (?:less|fewer) than\b", re.IGNORECASE)
 # Weaker words only count when they sit directly before the count ("less than 200 words") or after it ("or fewer").
 _AT_MOST_BEFORE_RE = re.compile(r"(?<!no )(?<!not )\b(?:less than|fewer than|below|within)\s*(?:about\s+|around\s+|~\s*)?$", re.IGNORECASE)
-_AT_LEAST_BEFORE_RE = re.compile(r"\b(?:more than|over|above|exceeds?)\s*(?:about\s+|around\s+|~\s*)?$", re.IGNORECASE)
+_AT_LEAST_BEFORE_RE = re.compile(r"(?<!not )(?<!never )(?<!n't )(?<!no )\b(?:more than|over|above|exceeds?)\s*(?:about\s+|around\s+|~\s*)?$", re.IGNORECASE)
 _AT_MOST_AFTER_RE = re.compile(r"^\s*or\s+(?:less|fewer)\b", re.IGNORECASE)
 _AT_LEAST_AFTER_RE = re.compile(r"^\s*or\s+more\b", re.IGNORECASE)
 # A count that applies to each part ("~150 words each", "per section", "2 paragraphs of 150 words") is no total.
@@ -179,11 +179,29 @@ def check_placeholders(content):
     )
 
 
+_SECOND_LEVEL_LABELS = {"co", "com", "org", "gov", "ac"}
+
+
+def _host_label(host):
+    """Registrable-domain label of a host: finance.yahoo.com -> yahoo, bbc.co.uk -> bbc."""
+    parts = [p for p in host.removeprefix("www.").split(".") if p]
+    if len(parts) > 2 and len(parts[-1]) == 2 and parts[-2] in _SECOND_LEVEL_LABELS:
+        parts = parts[:-2]
+    elif len(parts) > 1:
+        parts = parts[:-1]
+    return parts[-1] if parts else ""
+
+
+def _normalized(text):
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
 def check_citations(content, dossier):
     sources = (dossier or {}).get("sources") or []
     if not sources:
         return _passed("citations_present", "no research sources to cite")
     lowered = content.lower()
+    squashed = _normalized(content)
     for src in sources:
         # Guard: skip non-dict entries; treat None url/title as empty.
         if not isinstance(src, dict):
@@ -192,6 +210,10 @@ def check_citations(content, dossier):
         host = (urlparse(url).hostname or "").lower().removeprefix("www.") if url else ""
         title = (src.get("title") or "") if src.get("title") is not None else ""
         if (url and url.lower() in lowered) or (host and host in lowered) or (title and title.lower() in lowered):
+            return _passed("citations_present")
+        label = _normalized(_host_label(host))
+        name = _normalized(title)
+        if (len(label) >= 4 and label in squashed) or (name and name in squashed):
             return _passed("citations_present")
     return CheckResult(
         "citations_present",

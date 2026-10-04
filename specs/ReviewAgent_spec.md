@@ -23,6 +23,7 @@ Every deliverable the agency produces must pass a quality gate before reaching t
 | draft         | object | DraftAgent       | The draft deliverable to review                     |
 | brief         | object | User / IntakeAgent | Original brief for requirement comparison        |
 | revision_round | number | DraftAgent     | Current revision cycle number (0 = first review)   |
+| dossier       | object | ResearchAgent (via harness) | Optional research dossier to verify claims and citations against |
 
 ## Output Contract
 | Field              | Type   | Destination          | Description                                   |

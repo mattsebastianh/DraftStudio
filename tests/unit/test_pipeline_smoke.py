@@ -62,6 +62,7 @@ def test_happy_path_approves_and_writes_deliverable(repo):
     step = log["steps"][2]
     assert step["schema_enforced"] is True and step["validation_retries"] == 0 and step["finish_reasons"] == ["stop"]
     assert step["output"]["status"] == "approved" and len(step["output"]["checks"]) == 5
+    assert "dossier" not in step["input"]  # no research ran
     dispatch_input = log["steps"][3]["input"]
     assert dispatch_input["draft"]["content"] == GOOD and dispatch_input["review_summary"]["revision_rounds"] == 0
     saved = json.loads((repo / "tests" / "live_runs" / f"run_{log['run_id']}.json").read_text())
@@ -126,6 +127,8 @@ def test_research_with_tools_feeds_a_sourced_dossier_downstream(repo):
     research = log["steps"][1]
     assert research["skipped"] is False and research["output"]["sources"] == [{"title": "Regulation (EU) 2024/1689", "url": REG_URL}]
     assert log["steps"][-1]["input"]["sources"] == [{"title": "Regulation (EU) 2024/1689", "url": REG_URL}]
+    review_input = next(s for s in log["steps"] if s["agent"] == "ReviewAgent")["input"]
+    assert review_input["dossier"] == research["output"]
     assert "flags" not in log and not post.responses
 
 
@@ -296,3 +299,7 @@ def test_other_import_errors_propagate_unchanged(monkeypatch):
     with pytest.raises(ModuleNotFoundError) as caught:
         _load_run_pipeline_fresh(monkeypatch, "harness.messages")
     assert caught.value.name == "harness.messages"
+
+
+def test_revise_format_keeps_the_required_length():
+    assert "Keep the length the brief requires (do not shorten the draft below its word range while fixing issues)." in run_pipeline.REVISE_FORMAT
