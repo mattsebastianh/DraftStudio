@@ -1,0 +1,339 @@
+"""All model calls: the provider chain (Groq, then OpenRouter), the daily-quota model fallback,
+retries, and schema-enforced replies with validation retries."""
+
+import json
+import re
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+
+from jsonschema import Draft202012Validator
+
+from harness import config
+from harness.jsonutil import extract_json
+from harness.urls import require_safe_base_url
+
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+RETRYABLE_CODES = (0, 429, 500, 502, 503, 504)
+MIN_CLAMPED_MAX_TOKENS = 1_024
+_TPM_LIMIT_RE = re.compile(r"limit\s+(\d+),\s*requested\s+(\d+)", re.IGNORECASE)
+
+
+class LLMHTTPError(Exception):
+    """HTTP failure from a model API. code == 0 means a connection-level error."""
+
+    def __init__(self, code, detail, retry_after=None):
+        super().__init__(f"HTTP {code}: {detail[:300]}")
+        self.code = code
+        self.detail = detail
+        self.retry_after = retry_after
+
+
+class SchemaUnsupported(Exception):
+    """A provider/model rejected the response_format we asked for. `key` is "provider:model"."""
+
+    def __init__(self, key, detail):
+        super().__init__(f"{key} rejected the requested response_format: {detail[:200]}")
+        self.key = key
+
+
+class ReplyError(Exception):
+    """A reply the pipeline cannot use. `raw` is the reply text, saved for debugging."""
+
+    def __init__(self, message, raw=""):
+        super().__init__(message)
+        self.raw = raw
+
+
+class TruncatedReply(ReplyError):
+    pass
+
+
+class SchemaValidationError(ReplyError):
+    pass
+
+
+class InvalidGeneration(ReplyError):
+    """The provider rejected the model's own output as invalid JSON (Groq: json_validate_failed)."""
+
+
+@dataclass
+class Provider:
+    name: str
+    base_url: str
+    api_key: str
+    model: str  # sticky: becomes fallback_model after a daily-quota 429
+    fallback_model: str | None = None
+
+
+def build_messages(system, user):
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def validation_errors(data, schema):
+    """Up to five readable schema violations, e.g. "$.score: 'x' is not of type 'integer'"."""
+    validator = Draft202012Validator(schema)
+    errors = sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.absolute_path])
+    return [f"$.{'.'.join(str(p) for p in e.absolute_path)}: {e.message}" for e in errors][:5]
+
+
+def openrouter_configured(env):
+    key = env.get("OPENROUTER_API_KEY", "")
+    return bool(key) and not key.startswith("your-") and bool(env.get("OPENROUTER_PRIMARY_MODEL"))
+
+
+def http_post(base_url, api_key, payload, timeout=300):
+    """POST one chat completion. Raises LLMHTTPError for HTTP, connection and non-JSON failures."""
+    req = urllib.request.Request(
+        base_url.rstrip("/") + "/chat/completions",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": "Bearer " + api_key,
+            "Content-Type": "application/json",
+            "User-Agent": "DraftStudio-harness/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as err:
+        retry_after = _seconds(err.headers.get("Retry-After") if err.headers else None)
+        raise LLMHTTPError(err.code, err.read().decode(errors="replace")[:20_000], retry_after) from err
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as err:
+        raise LLMHTTPError(0, str(err)) from err
+
+
+def _seconds(value):
+    try:
+        return float(value) if value is not None else None
+    except ValueError:
+        return None  # an HTTP-date Retry-After: use exponential backoff instead
+
+
+def _clamped_budget(detail, budget):
+    """For "Request too large ... Limit L, Requested R", a smaller max_tokens that fits, else None."""
+    match = _TPM_LIMIT_RE.search(detail)
+    if not match:
+        return None
+    limit, requested = int(match.group(1)), int(match.group(2))
+    smaller = budget - (requested - limit) - 256
+    return smaller if MIN_CLAMPED_MAX_TOKENS <= smaller < budget else None
+
+
+def _failed_generation(detail):
+    try:
+        return str(json.loads(detail)["error"].get("failed_generation") or "")
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return ""
+
+
+class LLMClient:
+    """Chat client for one pipeline run. Model and provider switches are sticky for the rest of the run."""
+
+    def __init__(self, env, post=None, sleep=time.sleep, log=print):
+        self.env = env
+        self.post = post or http_post
+        self.sleep = sleep
+        self.log = log
+        self.primary_model = env["GROQ_PRIMARY_MODEL"]
+        self.providers = [
+            Provider("groq", env["GROQ_BASE_URL"], env["GROQ_API_KEY"], self.primary_model, env.get("GROQ_FALLBACK_MODEL") or None)
+        ]
+        if openrouter_configured(env):
+            self.providers.append(
+                Provider(
+                    "openrouter",
+                    env.get("OPENROUTER_BASE_URL") or DEFAULT_OPENROUTER_BASE_URL,
+                    env["OPENROUTER_API_KEY"],
+                    env["OPENROUTER_PRIMARY_MODEL"],
+                )
+            )
+        self._current = 0
+        self.schema_mode = {}  # "provider:model" -> "json_schema" | "json_object"
+
+    @property
+    def provider(self):
+        return self.providers[self._current]
+
+    @property
+    def active_model(self):
+        return self.provider.model
+
+    @property
+    def fallback_model_used(self):
+        """The Groq model that took over after a daily-quota 429, or None."""
+        model = self.providers[0].model
+        return None if model == self.primary_model else model
+
+    @property
+    def fallback_provider_used(self):
+        return self.provider.name if self._current else None
+
+    # -- one completion -------------------------------------------------------------
+    def complete(self, messages, max_tokens, *, response_format=None, tools=None, reasoning_effort=None):
+        """One chat completion, moving down the provider chain when a provider fails.
+
+        Returns {content, message, finish_reason, usage, seconds, model, provider}.
+        """
+        started = time.time()
+        while True:
+            provider = self.provider
+            try:
+                body, model = self._complete_on(provider, messages, max_tokens, response_format, tools, reasoning_effort)
+                break
+            except LLMHTTPError as err:
+                if self._current + 1 == len(self.providers):
+                    raise
+                self._current += 1
+                self.log(f"    {provider.name} unavailable ({err}); switching to {self.provider.name} for the rest of the run")
+        choice = body["choices"][0]
+        message = choice.get("message") or {}
+        return {
+            "content": message.get("content") or "",
+            "message": message,
+            "finish_reason": choice.get("finish_reason"),
+            "usage": body.get("usage") or {},
+            "seconds": round(time.time() - started, 1),
+            "model": model,
+            "provider": provider.name,
+        }
+
+    def _complete_on(self, provider, messages, max_tokens, response_format, tools, reasoning_effort):
+        """Call one provider: transient-error retries, the daily-quota model fallback and the 413 clamp."""
+        require_safe_base_url(provider.base_url)
+        budget, clamped, retries = max_tokens, False, 0
+        while True:
+            model = provider.model
+            payload = {"model": model, "messages": messages, "max_tokens": budget, "temperature": 0.6}
+            if response_format:
+                payload["response_format"] = response_format
+            if tools:
+                payload["tools"] = tools
+            if reasoning_effort and model.startswith("openai/gpt-oss"):
+                payload["reasoning_effort"] = reasoning_effort
+            try:
+                body = self.post(provider.base_url, provider.api_key, payload)
+                if not isinstance(body, dict) or not body.get("choices"):
+                    raise LLMHTTPError(502, "response without choices: " + json.dumps(body)[:300])
+                return body, model
+            except LLMHTTPError as err:
+                low = err.detail.lower()
+                if err.code == 429 and "tokens per day" in low:
+                    if provider.fallback_model and model != provider.fallback_model:
+                        self.log(f"    {model} hit its daily token quota, falling back to {provider.fallback_model}")
+                        provider.model = provider.fallback_model
+                        continue
+                    raise
+                if err.code == 400 and "json_validate_failed" in low:
+                    raise InvalidGeneration(
+                        f"{provider.name}:{model} rejected its own reply as invalid JSON", _failed_generation(err.detail)
+                    ) from err
+                if err.code == 400 and response_format and any(
+                    word in low for word in ("response_format", "json_schema", "json_object", "json mode")
+                ):
+                    raise SchemaUnsupported(f"{provider.name}:{model}", err.detail) from err
+                if err.code == 413 and not clamped:
+                    smaller = _clamped_budget(err.detail, budget)
+                    if smaller:
+                        self.log(f"    request too large for {model}'s rate limit; retrying with max_tokens={smaller}")
+                        budget, clamped = smaller, True
+                        continue
+                retryable = err.code in RETRYABLE_CODES or (err.code == 400 and "tool_use_failed" in low)
+                if not retryable or retries == 4:
+                    raise
+                retries += 1
+                wait = err.retry_after or 2**retries
+                self.log(f"    {err}; retrying in {wait:.0f}s")
+                self.sleep(wait)
+
+    # -- structured output ------------------------------------------------------------
+    @staticmethod
+    def _accumulate(meta, res, mode):
+        meta["provider"] = res["provider"]
+        meta["model"] = res["model"]
+        meta["seconds"] = round(meta["seconds"] + res["seconds"], 1)
+        meta["schema_enforced"] = mode == "json_schema"
+        meta["finish_reasons"].append(res["finish_reason"])
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            meta["usage"][key] += res["usage"].get(key) or 0
+
+    @staticmethod
+    def _parse(text):
+        """Return (data, used_extract_json, error). Strict json.loads first; extract_json is the last resort."""
+        try:
+            data, used_extract = json.loads(text), False
+        except json.JSONDecodeError:
+            try:
+                data, used_extract = extract_json(text), True
+            except ValueError as err:  # json.JSONDecodeError is a ValueError too
+                return None, False, f"reply was not valid JSON ({err})"
+        if not isinstance(data, dict):
+            return None, used_extract, "reply must be a JSON object"
+        return data, used_extract, None
+
+    def chat_structured(self, messages, schema, name, max_tokens, reasoning_effort=None, max_validation_retries=2):
+        """Return (data, meta) where data validates against `schema`.
+
+        Asks for json_schema output; a provider/model that rejects it switches to JSON mode with the schema
+        in the prompt (remembered per provider and model). Invalid replies are retried with the errors fed
+        back, at most `max_validation_retries` times; a truncated reply is retried once with 1.5x the budget,
+        never above config.MAX_COMPLETION_TOKENS.
+        """
+        messages = list(messages)
+        meta = {
+            "provider": self.provider.name,
+            "model": self.active_model,
+            "seconds": 0.0,
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            "schema_enforced": False,
+            "validation_retries": 0,
+            "finish_reasons": [],
+            "used_extract_json": False,
+        }
+        budget, raised_budget = max_tokens, False
+        while True:
+            mode = self.schema_mode.get(f"{self.provider.name}:{self.active_model}", "json_schema")
+            if mode == "json_schema":
+                response_format = {"type": "json_schema", "json_schema": {"name": name, "schema": schema, "strict": False}}
+                send = messages
+            else:
+                response_format = {"type": "json_object"}
+                schema_note = "Return one JSON object matching this JSON Schema:\n" + json.dumps(schema)
+                send = messages + [{"role": "user", "content": schema_note}]
+            try:
+                res = self.complete(send, budget, response_format=response_format, reasoning_effort=reasoning_effort)
+            except SchemaUnsupported as err:
+                if self.schema_mode.get(err.key) == "json_object":
+                    raise
+                self.schema_mode[err.key] = "json_object"
+                self.log(f"    {err.key} does not accept json_schema; using JSON mode with local validation")
+                continue
+            except InvalidGeneration as err:
+                meta["finish_reasons"].append("invalid_generation")
+                errors, raw = [str(err)], err.raw
+            else:
+                self._accumulate(meta, res, mode)
+                raw = res["content"]
+                if res["finish_reason"] == "length":
+                    if raised_budget or budget >= config.MAX_COMPLETION_TOKENS:
+                        raise TruncatedReply(f"reply truncated at {budget} tokens", raw)
+                    budget, raised_budget = min(int(budget * 1.5), config.MAX_COMPLETION_TOKENS), True
+                    self.log(f"    reply truncated; retrying once with max_tokens={budget}")
+                    continue
+                data, used_extract, error = self._parse(raw)
+                if used_extract:
+                    meta["used_extract_json"] = True
+                    self.log("    reply was not clean JSON; recovered it with extract_json")
+                errors = [error] if error else validation_errors(data, schema)
+                if not errors:
+                    return data, meta
+            if meta["validation_retries"] >= max_validation_retries:
+                raise SchemaValidationError("; ".join(errors), raw)
+            meta["validation_retries"] += 1
+            self.log(f"    reply failed validation ({errors[0]}); retry {meta['validation_retries']}/{max_validation_retries}")
+            feedback = {
+                "role": "user",
+                "content": "Your reply failed validation: " + "; ".join(errors) + ". Return the corrected JSON object only.",
+            }
+            messages = messages + ([{"role": "assistant", "content": raw}] if raw else []) + [feedback]
