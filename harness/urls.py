@@ -17,7 +17,10 @@ def require_safe_base_url(base_url):
 
 def normalize_url(url):
     """Canonical form for comparing URLs: lowercase scheme and host, no fragment, no trailing slash."""
-    parts = urllib.parse.urlsplit(url.strip())
+    try:
+        parts = urllib.parse.urlsplit(url.strip())
+    except ValueError:
+        return url.strip()
     return urllib.parse.urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), parts.query, ""))
 
 
@@ -35,10 +38,15 @@ def is_public_url(url, resolve=None):
     With `resolve` (socket.getaddrinfo or a fake), a host name must resolve only to public addresses;
     without it only literal IPs and local-looking names are checked (enough to screen search results).
     """
-    parts = urllib.parse.urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.hostname:
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = (parts.hostname or "").lower().rstrip(".")
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:  # malformed brackets or port
         return False
-    host = parts.hostname.lower().rstrip(".")
+    # Userinfo is refused: the connection could target a different host string than the one checked here.
+    if parts.scheme not in ("http", "https") or not host or "@" in parts.netloc:
+        return False
     if host == "localhost" or host.endswith((".localhost", ".local", ".internal", ".lan", ".home.arpa")):
         return False
     try:
@@ -50,7 +58,6 @@ def is_public_url(url, resolve=None):
     if resolve is None:
         return True
     try:
-        port = parts.port or (443 if parts.scheme == "https" else 80)
         infos = resolve(host, port, proto=socket.IPPROTO_TCP)
     except (OSError, UnicodeError, ValueError):
         return False

@@ -4,11 +4,12 @@ Everything these tools return is untrusted web content: it reaches the model wra
 <untrusted_tool_output> tags, and only URLs the tools actually returned count as evidence.
 """
 
-import html
 import json
 import re
 import socket
+import urllib.error
 import urllib.request
+from html.parser import HTMLParser
 
 from harness import config
 from harness.urls import is_public_url, normalize_url, require_safe_base_url
@@ -49,7 +50,16 @@ def tool_defs(names=("web_search", "fetch_url")):
 
 def wrap_untrusted(text):
     """Mark tool output as untrusted data; drop copies of the wrapper tag so content cannot close it early."""
-    return "<untrusted_tool_output>\n" + _WRAPPER_TAG.sub("", text) + "\n</untrusted_tool_output>"
+    stripped = _WRAPPER_TAG.sub("", text)
+    while stripped != text:  # removing a tag can join the pieces around it into a new one
+        text, stripped = stripped, _WRAPPER_TAG.sub("", stripped)
+    return "<untrusted_tool_output>\n" + text + "\n</untrusted_tool_output>"
+
+
+def _failure(what, err):
+    """Model-facing failure text: fixed wording, never text a remote server controls (reason phrases, messages)."""
+    code = f" HTTP {err.code}" if isinstance(err, urllib.error.HTTPError) else ""
+    return f"{what} failed ({type(err).__name__}){code}"
 
 
 def search(query, max_results, env, opener=None):
@@ -64,15 +74,18 @@ def search(query, max_results, env, opener=None):
     req = urllib.request.Request(
         base_url,
         data=json.dumps({"query": query, "max_results": max_results}).encode(),
-        headers={"Authorization": "Bearer " + env["SEARCH_API_KEY"], "Content-Type": "application/json", "User-Agent": USER_AGENT},
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
     )
+    # Unredirected: urllib copies req.headers to a redirect target, which must never receive the key.
+    req.add_unredirected_header("Authorization", "Bearer " + env["SEARCH_API_KEY"])
     try:
         with (opener or urllib.request.urlopen)(req, timeout=30) as resp:
             body = json.load(resp)
     except Exception as err:  # network, HTTP and decoding errors all fail soft
-        raise ToolError(f"search failed ({err})") from err
+        raise ToolError(_failure("search", err)) from err
+    items = body.get("results") if isinstance(body, dict) else None
     results = []
-    for item in (body.get("results") if isinstance(body, dict) else None) or []:
+    for item in items if isinstance(items, list) else []:
         if isinstance(item, dict) and is_public_url(str(item.get("url", ""))):
             results.append(
                 {"title": str(item.get("title", ""))[:200], "url": str(item["url"]), "snippet": str(item.get("content", ""))[:SNIPPET_MAX_CHARS]}
@@ -89,8 +102,57 @@ class _PublicOnlyRedirects(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if not is_public_url(newurl, self.resolve):
-            raise ToolError(f"refused redirect to a non-public URL ({newurl})")
+            raise ToolError("refused redirect to a non-public URL")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+class _TextExtractor(HTMLParser):
+    """Single linear pass over a page: the first <title> and the visible text, ignoring script, style and noscript."""
+
+    HIDDEN = ("script", "style", "noscript")
+
+    def __init__(self, max_chars):
+        super().__init__(convert_charrefs=True)
+        self.max_chars = max_chars
+        self.title = ""
+        self.pieces = []
+        self.size = 0
+        self._hidden_tag = None
+        self._title_parts = None  # None until a <title> opens, a list while it is open
+        self._title_done = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.HIDDEN and self._hidden_tag is None:
+            self._hidden_tag = tag
+        elif tag == "title" and self._hidden_tag is None and self._title_parts is None:  # only the first <title> counts
+            self._title_parts = []
+
+    def handle_endtag(self, tag):
+        if tag == self._hidden_tag:
+            self._hidden_tag = None
+        elif tag == "title" and self._title_parts is not None and not self._title_done:
+            self.title = " ".join(" ".join(self._title_parts).split())[:200]
+            self._title_done = True
+
+    def handle_data(self, data):
+        if self._hidden_tag is not None:
+            return
+        piece = " ".join(data.split())
+        if not piece:
+            return
+        if self._title_parts is not None and not self._title_done and len(self._title_parts) < 200:
+            self._title_parts.append(piece)
+        if self.size <= self.max_chars:  # past max_chars nothing more is kept
+            self.pieces.append(piece)
+            self.size += len(piece) + 1
+
+
+def extract_text(markup, max_chars=FETCH_MAX_CHARS):
+    """(title, readable text truncated to max_chars) of an HTML page. Linear time, whatever the markup."""
+    parser = _TextExtractor(max_chars)
+    parser.feed(markup)
+    parser.close()
+    return parser.title, " ".join(parser.pieces)[:max_chars]
 
 
 def fetch(url, opener=None, max_chars=FETCH_MAX_CHARS, resolve=socket.getaddrinfo):
@@ -103,23 +165,19 @@ def fetch(url, opener=None, max_chars=FETCH_MAX_CHARS, resolve=socket.getaddrinf
         with open_url(req, timeout=30) as resp:
             content_type = resp.headers.get_content_type() if getattr(resp, "headers", None) else "text/html"
             if not (content_type.startswith("text/") or content_type in TEXT_CONTENT_TYPES):
-                raise ToolError(f"unsupported content type {content_type}")
+                raise ToolError(f"unsupported content type {content_type[:60]}")
             raw = resp.read(500_000).decode("utf-8", errors="replace")
     except ToolError:
         raise
     except Exception as err:  # network, HTTP and decoding errors all fail soft
-        raise ToolError(f"fetch failed ({err})") from err
-    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw)
-    title = html.unescape(re.sub(r"\s+", " ", match.group(1))).strip()[:200] if match else ""
-    raw = re.sub(r"(?is)<(script|style|noscript)\b.*?</\1\s*>", " ", raw)
-    text = html.unescape(re.sub(r"<[^>]+>", " ", raw))
-    return title, re.sub(r"\s+", " ", text).strip()[:max_chars]
+        raise ToolError(_failure("fetch", err)) from err
+    return extract_text(raw, max_chars)
 
 
 def _max_results(value):
     try:
         return max(1, min(int(value), MAX_SEARCH_RESULTS))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: JSON 1e999 parses to infinity
         return MAX_SEARCH_RESULTS
 
 
@@ -143,10 +201,13 @@ class ToolBox:
             if name == "fetch_url":
                 url = str(args.get("url", ""))
                 title, text = fetch(url, self.opener, resolve=self.resolve)
-                self._record(url, title, text)
+                if text:  # a page with no text supports no claim
+                    self._record(url, title, text)
                 return wrap_untrusted(text)
         except ToolError as err:
             return f"error: {err}"
+        except Exception as err:  # a tool bug or hostile input must not end the research loop
+            return f"error: tool failed ({type(err).__name__})"
         return f"error: unknown tool {name}"
 
     def _record(self, url, title, excerpt):
