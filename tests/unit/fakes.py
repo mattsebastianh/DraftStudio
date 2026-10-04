@@ -1,5 +1,7 @@
 """Test doubles shared by the harness unit tests. Nothing here touches the network."""
 
+import email.message
+import io
 import json
 
 from harness.llm import LLMClient
@@ -58,3 +60,39 @@ class FakePost:
 
 def make_client(post, env=ENV):
     return LLMClient(env, post=post, sleep=lambda seconds: None, log=lambda *args: None)
+
+
+class FakeResponse(io.BytesIO):
+    """What urlopen() returns, enough for the tools: read(), headers, context manager."""
+
+    def __init__(self, data, content_type="text/html; charset=utf-8"):
+        super().__init__(data)
+        self.headers = email.message.Message()
+        self.headers["Content-Type"] = content_type
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def opener_returning(payload, content_type="text/html; charset=utf-8"):
+    """A fake urlopen returning `payload` (bytes, or a JSON-encoded object) and recording the request."""
+    seen = {}
+
+    def opener(req, timeout=None):
+        seen.update(url=req.full_url, headers=dict(req.header_items()), data=req.data)
+        data = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+        return FakeResponse(data, content_type)
+
+    opener.seen = seen
+    return opener
+
+
+def public_resolve(host, port, proto=0):
+    return [(2, 1, 6, "", ("93.184.216.34", port))]
+
+
+def private_resolve(host, port, proto=0):
+    return [(2, 1, 6, "", ("10.0.0.7", port))]

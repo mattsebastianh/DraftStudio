@@ -11,11 +11,22 @@
         },
         "max_results": {
           "type": "integer",
-          "description": "Maximum number of results to return (default: 10)",
-          "default": 10
+          "description": "Maximum number of results to return (default 5, at most 5)",
+          "default": 5
         }
       },
       "required": ["query"]
+    }
+  },
+  {
+    "name": "fetch_url",
+    "description": "Fetch a public web page and return its readable text (truncated). Only public http/https URLs are allowed.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "The page URL to fetch" }
+      },
+      "required": ["url"]
     }
   },
   {
