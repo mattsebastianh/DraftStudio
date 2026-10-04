@@ -245,7 +245,7 @@ def test_schema_mode_is_tracked_per_provider():
     for _ in range(3):
         client.chat_structured(MSGS, SCHEMA, "R", 1000)
     assert post.urls[4] == "https://or.test/v1"
-    assert post.payloads[4]["response_format"]["type"] == "json_schema"
+    assert post.payloads[4]["response_format"]["type"] == "json_object"  # OpenRouter defaults to JSON mode
 
 
 # --- base URL safety (ported) --------------------------------------------------------
@@ -377,3 +377,14 @@ def test_http_post_non_json_body_is_code_zero():
 )
 def test_retry_after_is_sanitised(value, expected):
     assert _seconds(value) == expected
+
+
+def test_openrouter_defaults_to_json_mode_because_json_schema_flattens_line_breaks():
+    """Live finding (2026-10-04): gpt-oss on OpenRouter drops every newline under json_schema, so drafts
+    came back as one line; JSON mode keeps them. Groq keeps json_schema."""
+    post = FakePost(LLMHTTPError(403, DENIED), body('{"score": 1}'))
+    client = make_client(post, OPENROUTER_ENV)
+    _, meta = client.chat_structured(MSGS, SCHEMA, "R", 1000)
+    assert post.payloads[1]["response_format"] == {"type": "json_object"}
+    assert "JSON Schema" in post.payloads[1]["messages"][-1]["content"]
+    assert meta["provider"] == "openrouter" and meta["schema_enforced"] is False

@@ -189,14 +189,19 @@ class LLMClient:
         return self.provider.name if self._current else None
 
     # -- one completion -------------------------------------------------------------
-    def complete(self, messages, max_tokens, *, response_format=None, tools=None, reasoning_effort=None):
+    def complete(self, messages, max_tokens, *, response_format=None, tools=None, reasoning_effort=None, prepare=None):
         """One chat completion, moving down the provider chain when a provider fails.
 
-        Returns {content, message, finish_reason, usage, seconds, model, provider}.
+        `prepare(provider) -> (messages, response_format, mode)`, when given, builds the request for whichever
+        provider is being tried, so a mid-call switch never reuses another provider's response format.
+        Returns {content, message, finish_reason, usage, seconds, model, provider, mode}.
         """
         started = time.time()
+        mode = None
         while True:
             provider = self.provider
+            if prepare:
+                messages, response_format, mode = prepare(provider)
             try:
                 body, model = self._complete_on(provider, messages, max_tokens, response_format, tools, reasoning_effort)
                 break
@@ -215,6 +220,7 @@ class LLMClient:
             "seconds": round(time.time() - started, 1),
             "model": model,
             "provider": provider.name,
+            "mode": mode,
         }
 
     def _complete_on(self, provider, messages, max_tokens, response_format, tools, reasoning_effort):
@@ -313,16 +319,18 @@ class LLMClient:
         }
         budget, raised_budget = max_tokens, False
         while True:
-            mode = self.schema_mode.get(f"{self.provider.name}:{self.active_model}", "json_schema")
-            if mode == "json_schema":
-                response_format = {"type": "json_schema", "json_schema": {"name": name, "schema": schema, "strict": False}}
-                send = messages
-            else:
-                response_format = {"type": "json_object"}
+            def prepare(provider, messages=messages):
+                # OpenRouter's json_schema mode flattens gpt-oss output to one line (no newlines survive), so it
+                # defaults to JSON mode plus local validation; Groq keeps json_schema.
+                default_mode = "json_object" if provider.name == "openrouter" else "json_schema"
+                mode = self.schema_mode.get(f"{provider.name}:{provider.model}", default_mode)
+                if mode == "json_schema":
+                    return messages, {"type": "json_schema", "json_schema": {"name": name, "schema": schema, "strict": False}}, mode
                 schema_note = "Return one JSON object matching this JSON Schema:\n" + json.dumps(schema)
-                send = messages + [{"role": "user", "content": schema_note}]
+                return messages + [{"role": "user", "content": schema_note}], {"type": "json_object"}, mode
+
             try:
-                res = self.complete(send, budget, response_format=response_format, reasoning_effort=reasoning_effort)
+                res = self.complete(messages, budget, reasoning_effort=reasoning_effort, prepare=prepare)
             except SchemaUnsupported as err:
                 if self.schema_mode.get(err.key) == "json_object":
                     raise
@@ -338,7 +346,7 @@ class LLMClient:
                 if not errors:
                     errors = [err.provider_message or str(err)]
             else:
-                self._accumulate(meta, res, mode)
+                self._accumulate(meta, res, res["mode"])
                 raw = res["content"]
                 if res["finish_reason"] == "length":
                     if raised_budget or budget >= config.MAX_COMPLETION_TOKENS:
