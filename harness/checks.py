@@ -203,3 +203,20 @@ def run_checks(brief, content, dossier):
         check_citations(content, dossier),
         check_format(brief, content),
     ]
+
+
+def finalize_review(llm_review, results, threshold):
+    """Merge deterministic results into the LLM review and compute the verdict in code."""
+    issues = list(llm_review.get("issues", []))
+    issues += [r.as_issue() for r in results if not r.passed]
+    has_critical = any(isinstance(i, dict) and i.get("severity") == "critical" for i in issues)
+    status = "approved" if int(llm_review["score"]) >= threshold and not has_critical else "revision_required"
+    llm_status = llm_review.get("status")
+    return {
+        **llm_review,
+        "issues": issues,
+        "status": status,
+        "checks": [r.as_dict() for r in results],
+        "llm_status": llm_status,
+        "status_disagreed": llm_status is not None and llm_status != status,
+    }

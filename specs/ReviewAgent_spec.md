@@ -15,6 +15,7 @@ Every deliverable the agency produces must pass a quality gate before reaching t
 - Identify and categorize specific problems with severity levels and suggested fixes
 - Track revision cycles and enforce the maximum revision limit
 - Approve deliverables that pass the quality threshold
+- Receive deterministic check results (length, key points, placeholders, citations, format) computed in code, and judge only what rules cannot; the system computes the final approval status from the score and all issues
 
 ## Input Contract
 | Field          | Type   | Source Agent     | Description                                        |
@@ -27,12 +28,11 @@ Every deliverable the agency produces must pass a quality gate before reaching t
 | Field              | Type   | Destination          | Description                                   |
 |--------------------|--------|----------------------|-----------------------------------------------|
 | review             | object | DraftAgent / DispatchAgent / User | Review result object              |
-| review.status      | string | DraftAgent / DispatchAgent | "approved" or "revision_required"       |
+| review.status      | string | DraftAgent / DispatchAgent | Advisory "approved" / "revision_required"; the system computes the final status (score >= 80 and no critical issue) |
 | review.score       | number | DraftAgent / DispatchAgent | Composite quality score 0-100        |
 | review.dimension_scores | object | DraftAgent / DispatchAgent | Per-dimension scores 0-100: clarity, accuracy, completeness, tone_alignment |
-| review.requirements_check | array | DraftAgent | Per-requirement pass/fail results        |
+| review.requirements | array | DraftAgent | Per-requirement pass/fail results        |
 | review.issues      | array  | DraftAgent           | Categorized issues with severity and fix suggestions |
-| review.approved    | boolean | DispatchAgent       | Whether the deliverable passes the quality gate   |
 
 ## Required Tools
 | Tool Name          | Purpose                                      | External Service |
