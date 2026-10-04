@@ -17,7 +17,7 @@ _NUMBER = r"\d+(?:[,.]\d+)*k?"
 _BETWEEN_RE = re.compile(rf"\bbetween\s+({_NUMBER})\s+and\s+({_NUMBER})\s*(words?|characters?|chars?)\b", re.IGNORECASE)
 # Hints that bind anywhere in the text before the count ("Max 2 paragraphs, 150 words"), or right after it.
 _AT_MOST_RE = re.compile(
-    r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno (?:more|longer) than\b|\bnot (?:more than|exceed(?:ing)?)\b|\bat most\b|\bunder\b",
+    r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno (?:more|longer) than\b|\bnot (?:more than|to exceed|exceed(?:ing)?|over|above)\b|(?:\b(?:never|do not|must not)|n't) exceed\b|\bat most\b|\bunder\b",
     re.IGNORECASE,
 )
 _AT_LEAST_RE = re.compile(r"≥|>=|\bmin(?:imum)?\b|\bat least\b|\b(?:no|not) (?:less|fewer) than\b", re.IGNORECASE)

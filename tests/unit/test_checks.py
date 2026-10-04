@@ -237,3 +237,29 @@ def test_weak_hint_words_elsewhere_in_the_text_are_not_ceilings():
 def test_absurd_numbers_skip_the_check_instead_of_raising(length):
     assert check({"length": length}, "w " * 50)["length"].passed
 
+
+@pytest.mark.parametrize(
+    "length, unit, limit",
+    [
+        ("not to exceed 300 words", "w ", 300),
+        ("never exceed 300 words", "w ", 300),
+        ("shouldn't exceed 150 words", "w ", 150),
+        ("do not exceed 500 words", "w ", 500),
+        ("not over 300 words", "w ", 300),
+        ("not above 300 words", "w ", 300),
+        ("must not exceed 300 words", "w ", 300),
+        ("never exceed 280 characters", "x", 280),
+        ("not to exceed 280 characters", "x", 280),
+    ],
+)
+def test_negated_limits_are_ceilings(length, unit, limit):
+    assert _passes(length, limit - 30, unit)
+    assert _passes(length, limit, unit)
+    assert not _passes(length, limit + 1, unit)
+    assert not _passes(length, limit * 2, unit)
+
+
+@pytest.mark.parametrize("length", ["more than 500 words", "over 500 words", "exceeds 500 words", "exceed 500 words"])
+def test_positive_forms_are_still_floors(length):
+    assert _passes(length, 900)
+    assert not _passes(length, 300)
