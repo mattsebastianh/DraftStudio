@@ -17,7 +17,7 @@ _NUMBER = r"\d+(?:[,.]\d+)*k?"
 _BETWEEN_RE = re.compile(rf"\bbetween\s+({_NUMBER})\s+and\s+({_NUMBER})\s*(words?|characters?|chars?)\b", re.IGNORECASE)
 # Hints that bind anywhere in the text before the count ("Max 2 paragraphs, 150 words"), or right after it.
 _AT_MOST_RE = re.compile(
-    r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno (?:more|longer) than\b|\bnot (?:more than|to exceed|exceed(?:ing)?|over|above)\b|(?:\b(?:never|do not|must not)|n't) exceed\b|\bat most\b|\bunder\b",
+    r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno (?:more|longer) than\b|\bnot (?:more than|to exceed|exceed(?:ing)?|over|above)\b|(?:\b(?:never|do not|must not|cannot|can not)|n't|can’t) exceed\b|(?:\bnot|\bcannot|n't|’t) be (?:more than|over|above|greater than|longer than)\b|(?:\bnot(?: to)?|n't|’t) go (?:over|above|beyond)\b|\bwithout exceeding\b|\bnot longer than\b|\bat most\b|\bunder\b",
     re.IGNORECASE,
 )
 _AT_LEAST_RE = re.compile(r"≥|>=|\bmin(?:imum)?\b|\bat least\b|\b(?:no|not) (?:less|fewer) than\b", re.IGNORECASE)
@@ -196,6 +196,25 @@ def _normalized(text):
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
+def _label_cited(label, content):
+    """Whether the domain label appears as a name: starting and ending on word edges, spanning words
+    ("GM Insights" -> gminsights), and a lone word only as a capitalized name ("Yahoo", not "the latest news")."""
+    tokens = [(m.start(), m.group()) for m in re.finditer(r"[A-Za-z0-9]+", content)]
+    starts, ends, pos = {}, {}, 0
+    for index, (_, word) in enumerate(tokens):
+        starts[pos] = index
+        pos += len(word)
+        ends[pos] = index
+    squashed = "".join(word for _, word in tokens).lower()
+    at = squashed.find(label)
+    while at != -1:
+        first, last = starts.get(at), ends.get(at + len(label))
+        if first is not None and last is not None and (first != last or tokens[first][1][0].isupper()):
+            return True
+        at = squashed.find(label, at + 1)
+    return False
+
+
 def check_citations(content, dossier):
     sources = (dossier or {}).get("sources") or []
     if not sources:
@@ -213,7 +232,7 @@ def check_citations(content, dossier):
             return _passed("citations_present")
         label = _normalized(_host_label(host))
         name = _normalized(title)
-        if (len(label) >= 4 and label in squashed) or (name and name in squashed):
+        if (len(label) >= 4 and _label_cited(label, content)) or (name and name in squashed):
             return _passed("citations_present")
     return CheckResult(
         "citations_present",

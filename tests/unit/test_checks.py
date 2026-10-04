@@ -136,6 +136,21 @@ def test_citations_match_sources_by_name():
     assert not check({}, GOOD + "\nSource: Reuters 2024", dossier)["citations_present"].passed
 
 
+@pytest.mark.parametrize(
+    "text, url",
+    [("the latest news", "https://news.com/a"), ("three times as many", "https://times.com/a"), ("Metadata", "https://data.gov/a")],
+)
+def test_citation_label_needs_word_boundaries_and_a_name(text, url):
+    assert not check({}, GOOD + " " + text, {"sources": [{"title": "Zed", "url": url}]})["citations_present"].passed
+
+
+def test_citation_label_still_matches_multiword_names():
+    gm = {"sources": [{"title": "Zed", "url": "https://www.gminsights.com/a"}]}
+    yahoo = {"sources": [{"title": "Zed", "url": "https://finance.yahoo.com/a"}]}
+    assert check({}, GOOD + " GM Insights 2025", gm)["citations_present"].passed
+    assert check({}, GOOD + " Yahoo Finance 2024", yahoo)["citations_present"].passed
+
+
 def test_citation_label_matches_for_country_domains_but_not_short_labels():
     assert checks._host_label("bbc.co.uk") == "bbc" and checks._host_label("finance.yahoo.com") == "yahoo"
     paper = {"sources": [{"title": "Report", "url": "https://www.theguardian.co.uk/news/1"}]}
@@ -263,3 +278,33 @@ def test_negated_limits_are_ceilings(length, unit, limit):
 def test_positive_forms_are_still_floors(length):
     assert _passes(length, 900)
     assert not _passes(length, 300)
+
+
+@pytest.mark.parametrize(
+    "length",
+    [
+        "cannot exceed 300 words",
+        "can not exceed 300 words",
+        "can't exceed 300 words",
+        "can’t exceed 300 words",
+        "must not be more than 300 words",
+        "should not be over 300 words",
+        "cannot be over 300 words",
+        "do not go over 300 words",
+        "not to go over 300 words",
+        "without exceeding 300 words",
+        "must not be longer than 300 words",
+    ],
+)
+def test_more_negated_phrasings_are_ceilings(length):
+    assert _passes(length, 250)
+    assert _passes(length, 300)
+    assert not _passes(length, 301)
+    assert not _passes(length, 400)
+
+
+def test_positive_floors_and_exact_bands_are_unchanged():
+    assert _passes("not less than 500 words", 900) and not _passes("not less than 500 words", 300)
+    assert _passes("no fewer than 500 words", 900) and not _passes("no fewer than 500 words", 300)
+    assert _passes("over email, exactly 500 words", 425) and _passes("over email, exactly 500 words", 575)
+    assert not _passes("over email, exactly 500 words", 424) and not _passes("over email, exactly 500 words", 576)
