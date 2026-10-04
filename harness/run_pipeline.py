@@ -21,9 +21,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from harness import checks, config, messages, schemas, wires  # noqa: E402
-from harness.llm import LLMClient, ReplyError, build_messages  # noqa: E402
-from harness.research import run_research  # noqa: E402
+try:
+    from harness import checks, config, messages, schemas, wires
+    from harness.llm import LLMClient, ReplyError, build_messages
+    from harness.research import run_research
+except ModuleNotFoundError as err:
+    if (err.name or "").split(".")[0] in ("jsonschema", "yaml"):
+        sys.exit(
+            "harness dependencies missing: run .venv/bin/python harness/run_pipeline.py "
+            "(setup: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt)"
+        )
+    raise
 
 UNWIRED = {"client_to_IntakeAgent"}  # the one hop without a wire file: every other hop is validated and must have one
 RESEARCH_CONFIDENCE_FLOOR = 60  # ResearchAgent's escalation rule: below this, flag the run for a human
@@ -217,6 +225,11 @@ def _run_steps(raw_request, client, env, repo, toolbox, log, progress):
             REVISE_FORMAT,
         )
 
+    # Dispatch only packages metadata, so the approved draft is saved first: a Dispatch failure must not lose it.
+    path = _deliverable_path(repo, draft["draft"]["title"], log["run_id"])
+    path.write_text(draft["draft"]["content"] + "\n")
+    log["deliverable"] = str(path.relative_to(repo))
+
     print("Step 6: DispatchAgent")
     progress["step"] = "DispatchAgent"
     dispatch = run_agent(
@@ -225,9 +238,6 @@ def _run_steps(raw_request, client, env, repo, toolbox, log, progress):
         messages.review_to_dispatch(draft["draft"], review, round_num, dossier),
         DISPATCH_FORMAT,
     )
-    path = _deliverable_path(repo, draft["draft"]["title"], log["run_id"])
-    path.write_text(draft["draft"]["content"] + "\n")
-    log["deliverable"] = str(path.relative_to(repo))
     log["delivery"] = dispatch
 
 

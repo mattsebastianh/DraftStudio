@@ -1,5 +1,7 @@
+import importlib.util
 import json
 import shutil
+import sys
 
 import pytest
 
@@ -256,3 +258,41 @@ def test_a_missing_wire_file_fails_closed(repo, monkeypatch):
     with pytest.raises(FileNotFoundError):
         run(repo, INTAKE, draft(GOOD))
     assert only_log(repo)["failed_step"] == "DraftAgent"
+
+
+def test_dispatch_failure_keeps_the_approved_deliverable(repo):
+    invalid = {"package": {"title": "Vacation Policy"}}  # no delivery_note, status or format
+    with pytest.raises(SchemaValidationError):
+        run(repo, INTAKE, draft(GOOD), review(90), invalid, invalid, invalid)
+    saved = only_log(repo)
+    assert saved["failed_step"] == "DispatchAgent" and saved["error"].startswith("SchemaValidationError")
+    assert (repo / saved["deliverable"]).read_text().strip() == GOOD
+    assert "delivery" not in saved and saved["final_score"] == 90
+
+
+def _load_run_pipeline_fresh(monkeypatch, blocked_module):
+    """Execute run_pipeline.py as a new module while `blocked_module` cannot be imported."""
+    import harness
+
+    for name in [n for n in sys.modules if n.startswith("harness.") or n in ("jsonschema", "yaml")]:
+        monkeypatch.delitem(sys.modules, name)
+        if name.startswith("harness."):  # `from harness import x` finds an already-set attribute without importing
+            monkeypatch.delattr(harness, name.split(".")[1], raising=False)
+    monkeypatch.setitem(sys.modules, blocked_module, None)  # makes `import <blocked_module>` raise ModuleNotFoundError
+    spec = importlib.util.spec_from_file_location("run_pipeline_fresh", config.REPO / "harness" / "run_pipeline.py")
+    spec.loader.exec_module(importlib.util.module_from_spec(spec))
+
+
+@pytest.mark.parametrize("missing", ["jsonschema", "yaml"])
+def test_missing_dependencies_exit_with_setup_instructions(monkeypatch, missing):
+    with pytest.raises(SystemExit) as caught:
+        _load_run_pipeline_fresh(monkeypatch, missing)
+    message = str(caught.value)
+    assert "harness dependencies missing" in message and ".venv/bin/python harness/run_pipeline.py" in message
+    assert "pip install -r requirements.txt" in message
+
+
+def test_other_import_errors_propagate_unchanged(monkeypatch):
+    with pytest.raises(ModuleNotFoundError) as caught:
+        _load_run_pipeline_fresh(monkeypatch, "harness.messages")
+    assert caught.value.name == "harness.messages"

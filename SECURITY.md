@@ -23,10 +23,16 @@ Things to know when running it:
   node to no authentication: each run makes 5-13 LLM calls on your quota.
 - **Telegram:** set *Restrict to Chat IDs* on the trigger to your own chat id. The imported
   placeholder rejects every message until you do.
-- **Prompt injection:** request text goes into the agents' prompts. The only tools agents can call
-  are Wikipedia and Tavily search. They are read-only, but the search query is written by the
-  model, so anything in a prompt can end up in a query. Do not put secrets in requests, and treat
-  generated content as untrusted.
+- **Prompt injection:** request text goes into the agents' prompts. The n8n workflow's agents can
+  call Wikipedia and Tavily search. The Python harness runs two tools for ResearchAgent,
+  `web_search` (Tavily) and `fetch_url`. All of them are read-only, but the model writes the search
+  query and, with `fetch_url`, chooses the URLs to fetch, so anything in a prompt can end up in a
+  query or steer a request to an attacker-controlled public host. The harness fetches only public
+  http(s) hosts: private, loopback, link-local and cloud-metadata addresses are refused, whether
+  given directly, returned by DNS or reached through a redirect, so such a request cannot reach
+  internal services. Fetched content is untrusted: it is truncated and wrapped in marker tags, and
+  the agent is told never to follow instructions inside it. Do not put secrets in requests, and
+  treat generated content as untrusted.
 
 ## Supported versions
 

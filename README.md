@@ -45,6 +45,7 @@ The agents communicate over 9 verified **wires** — explicit contracts in `wire
 
 ### Prerequisites
 
+- Python 3.10 or newer
 - [claude-code](https://claude.com/claude-code) CLI
 - A [Groq API key](https://console.groq.com/keys) (free tier works)
 - Recommended: an [OpenRouter API key](https://openrouter.ai/keys) as a second provider. Groq can be unreachable from some regions or VPN exit IPs, and the pipeline then fails over to OpenRouter

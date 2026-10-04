@@ -93,23 +93,26 @@ The approved content itself is written verbatim by the harness to deliverables/<
 ```json
 {
   "package": {
-    "content": "# EU AI Act Compliance Guide for Small SaaS Companies\n\n...(full content)...",
+    "title": "EU AI Act Compliance Guide for Small SaaS Companies",
+    "delivery_note": "Your compliance guide is attached. It went through one revision round and scored 87/100 in review.",
+    "status": "ready",
     "format": "markdown",
     "sources": [
-      { "title": "EU AI Act Full Text", "url": "https://example.com/eu-ai-act" }
+      "https://example.com/eu-ai-act"
     ],
     "revision_history": [
-      { "round": 1, "issues_addressed": 2, "changes": "Added documentation section and compliance deadlines" }
+      "Round 1: added documentation section and compliance deadlines (2 issues addressed)"
     ],
     "metadata": {
       "agency": "DraftStudio",
       "pipeline": ["IntakeAgent", "ResearchAgent", "DraftAgent", "ReviewAgent", "DispatchAgent"],
       "delivered": "2026-04-13T15:30:00Z"
     }
-  },
-  "delivery_status": "delivered"
+  }
 }
 ```
+
+The deliverable text itself is not repeated in the package: the pipeline saves it as a file before packaging.
 
 ## Open Questions
 - Should DispatchAgent support multiple delivery channels (email, API, file export)?
