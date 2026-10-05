@@ -105,9 +105,10 @@ def _after_limits(text_after):
 
 
 def _length_target(length):
-    """(unit, low, high) with the tolerance applied; high is None for "at least N".
+    """(unit, low, high) with the tolerance applied to targets and ranges; high is None for "at least N".
 
-    An explicit ceiling ("at most N", "less than N", "N or fewer") gets no tolerance above it. Counts that
+    An explicit ceiling ("at most N", "less than N", "N or fewer") gets no tolerance above it, and an explicit
+    floor ("at least N", "N+", "N minimum") none below it. Counts that
     apply per part ("150 words each", "2 paragraphs of 150 words") give no total and are skipped.
 
     None when the brief gives no word or character count ("1-2 pages", "short").
@@ -156,7 +157,7 @@ def _length_target(length):
         elif _AT_MOST_RE.search(text_before) or _AT_MOST_BEFORE_RE.search(text_before) or _AFTER_CEILING_RE.search(hint_after) or _AT_MOST_AFTER_RE.search(text_after):
             lo, hi = 0, num1  # an explicit ceiling gets no tolerance above it
         elif "+" in match.group(0) or _AT_LEAST_RE.search(text_before) or _AT_LEAST_BEFORE_RE.search(text_before) or _AFTER_FLOOR_RE.search(hint_after) or _AT_LEAST_AFTER_RE.search(text_after):
-            lo, hi = int(num1 * (1 - tol)), None
+            lo, hi = num1, None  # an explicit floor gets no tolerance below it, like a ceiling above
         else:
             lo, hi = int(num1 * (1 - tol)), math.ceil(num1 * (1 + tol))  # exact target
             plain += 1
@@ -166,8 +167,8 @@ def _length_target(length):
             hi = ceiling
             if lo > hi:
                 lo = int(hi * (1 - tol))
-        if floor is not None and (hi is None or int(floor * (1 - tol)) <= hi):
-            lo = max(lo, int(floor * (1 - tol)))
+        if floor is not None and (hi is None or floor <= hi):
+            lo = max(lo, floor)
         new_low = max(low, lo)
         new_high = hi if high is None else (high if hi is None else min(high, hi))
         if new_high is not None and new_low > new_high:
@@ -340,6 +341,26 @@ def finalize_review(llm_review, results, threshold):
     """
     llm_issues = llm_review.get("issues")
     issues = list(llm_issues) if isinstance(llm_issues, list) else []
+    if llm_issues is not None and not isinstance(llm_issues, list):  # a string or object could hide anything: fail closed
+        issues.append(
+            {
+                "severity": "critical",
+                "category": "malformed_review",
+                "description": "ReviewAgent returned issues that are not a list.",
+                "suggested_fix": "Re-run the review and return issues as a list.",
+            }
+        )
+    requirements = llm_review.get("requirements")
+    for req in requirements if isinstance(requirements, list) else []:
+        if isinstance(req, dict) and req.get("passed") is False:
+            issues.append(
+                {
+                    "severity": "critical",  # a stated requirement the reviewer marked unmet blocks approval
+                    "category": "requirement_failed",
+                    "description": f"Requirement not met: {req.get('requirement', '(unnamed)')}",
+                    "suggested_fix": "Revise the draft so that it meets this requirement.",
+                }
+            )
     issues += [r.as_issue() for r in results if not r.passed]
     score = llm_review.get("score")
     score_valid = isinstance(score, (int, float)) and not isinstance(score, bool) and 0 <= score <= 100

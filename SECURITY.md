@@ -33,7 +33,7 @@ Things to know when running it:
   it and again when the connection opens, so a hostile DNS server that changes its answer between
   the two lookups (DNS rebinding) is not stopped; run the harness without access to internal
   services if that matters to you. Fetched content is untrusted: it is truncated and wrapped in marker tags, and
-  the agent is told never to follow instructions inside it. Do not put secrets in requests, and
+  the agent is told never to follow instructions inside it. Page titles that travel on to later agents as source labels are cut to 80 characters of plain text, and those agents are told to treat them as data. Do not put secrets in requests, and
   treat generated content as untrusted.
 
 ## Supported versions

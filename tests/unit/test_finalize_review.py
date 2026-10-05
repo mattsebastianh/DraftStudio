@@ -96,11 +96,20 @@ def test_invalid_score_is_malformed_and_blocks():
         assert any(i["severity"] == "critical" and i["category"] == "malformed_review" for i in out["issues"])
 
 
-def test_malformed_issues_are_treated_as_no_llm_issues():
-    for bad in (None, "oops"):
+def test_missing_issues_mean_none_but_a_non_list_fails_closed():
+    out = _clean(dict(REVIEW, issues=None))
+    assert out["status"] == "approved" and out["issues"] == []
+    for bad in ("oops", {"severity": "critical"}):
         out = _clean(dict(REVIEW, issues=bad))
-        assert out["status"] == "approved"
-        assert out["issues"] == []
+        assert out["status"] == "revision_required"
+        assert any(i["category"] == "malformed_review" for i in out["issues"])
+
+
+def test_a_failed_requirement_blocks_approval():
+    review = dict(REVIEW, requirements=[{"requirement": "cover SMB exemptions", "passed": False}, {"requirement": "x", "passed": True}])
+    out = _clean(review)
+    assert out["status"] == "revision_required"
+    assert [i["description"] for i in out["issues"] if i["category"] == "requirement_failed"] == ["Requirement not met: cover SMB exemptions"]
 
 
 def test_score_is_compared_without_truncation():

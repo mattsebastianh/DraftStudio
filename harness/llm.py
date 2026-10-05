@@ -152,6 +152,17 @@ def _error_field(detail, field):
         return ""
 
 
+def _error_text(detail):
+    """The provider's own words about an error: code and message of a JSON body, or a plain-text body.
+
+    A JSON body without them yields "" so model-written text (failed_generation) is never read."""
+    try:
+        json.loads(detail)
+    except (ValueError, TypeError):
+        return str(detail).lower()[:300]
+    return f"{_error_field(detail, 'code')} {_error_field(detail, 'message')}".lower()
+
+
 class LLMClient:
     """Chat client for one pipeline run. Model and provider switches are sticky for the rest of the run."""
 
@@ -215,8 +226,7 @@ class LLMClient:
                 # A request the provider rejected as malformed would fail anywhere: no switch. A complaint about
                 # the provider's own setup (retired or unknown model, access) is not the request's fault.
                 # Only the error's own code and message are read: failed_generation holds model text.
-                said = f"{_error_field(err.detail, 'code')} {_error_field(err.detail, 'message')}".lower()
-                if err.code in (400, 422) and not any(word in (said.strip() or err.detail.lower()) for word in PROVIDER_FAULT_WORDS):
+                if err.code in (400, 422) and not any(word in _error_text(err.detail) for word in PROVIDER_FAULT_WORDS):
                     raise
                 if self._current + 1 == len(self.providers):
                     raise
@@ -410,7 +420,10 @@ class LLMClient:
                 meta["truncated_turns"] += 1
                 calls += 1
                 self.log(f"    tool-call turn truncated at max_tokens={max_tokens}")
-            messages.append({"role": "assistant", "content": res["content"], "tool_calls": requested})
+            echoed = requested
+            if truncated:  # cut-off arguments are invalid JSON: a provider may reject them on the next turn
+                echoed = [{**call, "function": {**(call.get("function") or {}), "arguments": "{}"}} for call in requested]
+            messages.append({"role": "assistant", "content": res["content"], "tool_calls": echoed})
             for call in requested:
                 function = call.get("function") or {}
                 name = function.get("name", "")

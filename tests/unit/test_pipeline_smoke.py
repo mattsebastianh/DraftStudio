@@ -313,3 +313,9 @@ def test_main_exits_nonzero_when_the_run_escalated(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         run_pipeline.main()
     assert exc.value.code == 2
+
+
+def test_messages_with_web_sources_carry_the_untrusted_note():
+    assert run_pipeline._has_sources({"sources": [{"url": "https://a.test"}]})
+    assert run_pipeline._has_sources({"dossier": {"sources": [{"url": "https://a.test"}]}})
+    assert not run_pipeline._has_sources({"brief": {}})

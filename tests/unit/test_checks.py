@@ -411,3 +411,18 @@ def test_host_citation_needs_word_edges_and_short_titles_are_not_enough():
 )
 def test_comma_limits_symbols_abbreviations_and_per_section_lists(length, words, passed):
     assert check({"length": length}, "w " * words)["length"].passed is passed
+
+
+@pytest.mark.parametrize(
+    "length, words, passed",
+    [
+        ("at least 300 words", 299, False),
+        ("at least 300 words", 300, True),
+        ("1000 words minimum", 900, False),
+        ("over 1000 words", 900, False),
+        ("1000+ words", 990, False),
+        ("1000 words max, 800 min", 790, False),
+    ],
+)
+def test_explicit_floors_get_no_tolerance_below(length, words, passed):
+    assert check({"length": length}, "w " * words)["length"].passed is passed

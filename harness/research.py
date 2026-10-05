@@ -3,6 +3,7 @@ tools actually returned. Fails soft: without a search key, or when nothing could
 empty dossier whose gaps say why, instead of unsourced claims."""
 
 import json
+import re
 
 from harness import config, schemas, tools
 from harness.llm import build_messages
@@ -12,6 +13,9 @@ TOOL_TURN_MAX_TOKENS = 4_000  # tool-calling turns are short; the dossier call g
 DIGEST_ITEM_CHARS = 1_200
 DIGEST_MAX_CHARS = 9_000
 NOTES_MAX_CHARS = 3_000
+
+
+SOURCE_TITLE_CHARS = 80
 
 
 def empty_dossier(topic, reason):
@@ -42,12 +46,18 @@ def enforce_sources(dossier, evidence, topic=None):
     for finding in kept:
         for url in finding["sources"]:
             if all(source["url"] != url for source in sources):
-                sources.append({"title": evidence[normalize_url(url)]["title"], "url": url})
+                sources.append({"title": source_title(evidence[normalize_url(url)]["title"]), "url": url})
     confidence = int(dossier.get("confidence", 0))
     if not kept:
         confidence = min(confidence, 40)
     clean = {"topic": str(topic if topic is not None else dossier.get("topic", "")), "findings": kept, "gaps": gaps, "confidence": confidence, "sources": sources}
     return clean, dropped
+
+
+def source_title(title):
+    """A web page's title as plain, short label text: it travels to later agents outside the untrusted wrapper."""
+    text = re.sub(r"[<>`{}\[\]]", "", " ".join(str(title or "").split()))
+    return text[:SOURCE_TITLE_CHARS].rstrip()
 
 
 def evidence_digest(evidence):

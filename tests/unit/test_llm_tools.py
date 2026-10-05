@@ -78,3 +78,11 @@ def test_malformed_tool_arguments_spend_budget_so_the_loop_ends_with_an_answer()
     post = FakePost(body("", finish="tool_calls", tool_calls=bad), body("answer"))
     _, final, _ = make_client(post).chat_with_tools(build_messages("s", "u"), TOOLS, lambda n, a: "R", max_calls=1, max_tokens=500)
     assert "tools" not in post.payloads[1] and final["content"] == "answer"
+
+
+def test_truncated_tool_call_is_echoed_with_empty_arguments():
+    cut = [{"id": "c1", "type": "function", "function": {"name": "web_search", "arguments": '{"query": "eu ai ac'}}]
+    post = FakePost(body("", finish="length", tool_calls=cut), body("answer"))
+    make_client(post).chat_with_tools(build_messages("s", "u"), TOOLS, lambda n, a: "R", max_calls=2, max_tokens=500)
+    echoed = [m for m in post.payloads[1]["messages"] if m.get("tool_calls")]
+    assert echoed and echoed[0]["tool_calls"][0]["function"]["arguments"] == "{}"
