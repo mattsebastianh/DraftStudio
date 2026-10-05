@@ -34,3 +34,7 @@ def test_extract_json_ignores_braces_inside_strings():
 def test_extract_json_keeps_code_fences_inside_strings():
     reply = 'Sure:\n```json\n{"content": "Use:\\n```python\\nprint(1)\\n```\\nDone"}\n```'
     assert extract_json(reply) == {"content": "Use:\n```python\nprint(1)\n```\nDone"}
+
+
+def test_extract_json_skips_prose_braces_before_the_object():
+    assert extract_json('Here is the {draft} you asked for: {"draft": {"title": "t"}}') == {"draft": {"title": "t"}}

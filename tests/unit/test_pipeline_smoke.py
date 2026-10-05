@@ -303,3 +303,13 @@ def test_other_import_errors_propagate_unchanged(monkeypatch):
 
 def test_revise_format_keeps_the_required_length():
     assert "Keep the length the brief requires (do not shorten the draft below its word range while fixing issues)." in run_pipeline.REVISE_FORMAT
+
+
+def test_main_exits_nonzero_when_the_run_escalated(monkeypatch):
+    monkeypatch.setattr(run_pipeline.sys, "argv", ["run_pipeline.py", "request"])
+    monkeypatch.setattr(run_pipeline.config, "load_env", lambda: {})
+    monkeypatch.setattr(run_pipeline, "LLMClient", lambda env: None)
+    monkeypatch.setattr(run_pipeline, "run", lambda *a, **k: {"run_id": "r1", "escalated": True})
+    with pytest.raises(SystemExit) as exc:
+        run_pipeline.main()
+    assert exc.value.code == 2

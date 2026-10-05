@@ -24,7 +24,10 @@ MAX_RETRY_AFTER_SECONDS = 120
 _TPM_LIMIT_RE = re.compile(r"limit\s+(\d+),\s*requested\s+(\d+)", re.IGNORECASE)
 
 
-PROVIDER_FAULT_WORDS = ("model", "decommission", "deprecat", "not found", "does not exist", "access", "tool_use_failed")
+PROVIDER_FAULT_WORDS = (
+    "model_decommissioned", "decommission", "deprecat", "model_not_found", "model not found", "unknown model",
+    "invalid model", "does not exist", "tool_use_failed", "permission", "unauthorized",
+)
 
 
 class LLMHTTPError(Exception):
@@ -420,6 +423,7 @@ class LLMClient:
                         if not isinstance(args, dict):
                             raise ValueError("arguments must be a JSON object")
                     except ValueError as err:  # json.JSONDecodeError is a ValueError too
+                        calls += 1  # a malformed call spends budget, so the loop cannot spin on it
                         result = f"error: invalid tool arguments ({err})"
                     else:
                         calls += 1

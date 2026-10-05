@@ -71,3 +71,10 @@ def test_truncated_tool_call_turn_spends_budget_and_is_reported():
     assert "tools" not in post.payloads[1]  # the budget is spent, so tools are withdrawn
     assert any("cut off" in m["content"] for m in messages if m["role"] == "tool")
     assert final["content"] == "answer"
+
+
+def test_malformed_tool_arguments_spend_budget_so_the_loop_ends_with_an_answer():
+    bad = [{"id": "c1", "type": "function", "function": {"name": "web_search", "arguments": "{oops"}}]
+    post = FakePost(body("", finish="tool_calls", tool_calls=bad), body("answer"))
+    _, final, _ = make_client(post).chat_with_tools(build_messages("s", "u"), TOOLS, lambda n, a: "R", max_calls=1, max_tokens=500)
+    assert "tools" not in post.payloads[1] and final["content"] == "answer"

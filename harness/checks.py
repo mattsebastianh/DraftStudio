@@ -36,8 +36,17 @@ _PER_ITEM_BEFORE_RE = re.compile(
 # After the count: "500 words max", "1000 words (max 1200)"; "max 3 sections" belongs to another count.
 _AFTER_CEILING_RE = re.compile(r"^[\s(,–-]*(?:max(?:imum)?|at most|tops|up to|no more than)\b(?!\s*\d)", re.IGNORECASE)
 _AFTER_FLOOR_RE = re.compile(r"^[\s(,–-]*(?:min(?:imum)?|at least)\b(?!\s*\d)", re.IGNORECASE)
+_UNITLESS_END = r"\s*(?:words?|characters?|chars?)?\s*(?:[).,;]|$)"
 _AFTER_CEILING_NUM_RE = re.compile(
-    rf"^[\s(,–-]*(?:max(?:imum)?|at most|up to|no more than)\s*(?:of\s*)?({_NUMBER})\s*(?:words?|characters?|chars?)?\s*(?:[).,;]|$)",
+    rf"(?:^|[,;(])\s*(?:but\s+|and\s+)?(?:(?:max(?:imum)?|at most|up to|no more than)\s*(?:of\s*)?({_NUMBER}){_UNITLESS_END}|({_NUMBER})\s*max(?:imum)?\b)",
+    re.IGNORECASE,
+)
+_AFTER_FLOOR_NUM_RE = re.compile(
+    rf"(?:^|[,;(])\s*(?:but\s+|and\s+)?(?:(?:min(?:imum)?|at least)\s*(?:of\s*)?({_NUMBER}){_UNITLESS_END}|({_NUMBER})\s*min(?:imum)?\b)",
+    re.IGNORECASE,
+)
+_NOUN_LIMIT_RE = re.compile(
+    r"\b(?:max(?:imum)?|min(?:imum)?|at most|at least|up to|no more than|under|over)\s*\d[\d,.]*\s+(?!words?\b|characters?\b|chars?\b)[a-z]+\b",
     re.IGNORECASE,
 )
 _CLAUSE_END_RE = re.compile(r"[,;]\s*")
@@ -83,6 +92,18 @@ def _parse_number(num_str):
     return int(value)  # OverflowError for inf
 
 
+def _after_limits(text_after):
+    """(floor, ceiling) numbers stated after a count without a unit; None where absent."""
+    found = []
+    for pattern in (_AFTER_FLOOR_NUM_RE, _AFTER_CEILING_NUM_RE):
+        match = pattern.search(text_after)
+        try:
+            found.append(_parse_number(match.group(1) or match.group(2)) if match else None)
+        except (ValueError, OverflowError):
+            found.append(None)
+    return tuple(found)
+
+
 def _length_target(length):
     """(unit, low, high) with the tolerance applied; high is None for "at least N".
 
@@ -119,7 +140,7 @@ def _length_target(length):
         between = text[before_start : match.start()]
         if index:  # the previous count's trailing hint ("500 words max,") is not this count's
             between = _CLAUSE_END_RE.split(between, maxsplit=1)[-1]
-        text_before = _SENTENCE_SPLIT_RE.split(between)[-1]
+        text_before = _NOUN_LIMIT_RE.sub("", _SENTENCE_SPLIT_RE.split(between)[-1])  # "max 3 sections" is not about words
         text_after = _SENTENCE_SPLIT_RE.split(text[match.end() : after_end])[0]
         if _PER_ITEM_AFTER_RE.search(text_after[:16]) or _PER_ITEM_BEFORE_RE.search(text_before):
             continue
@@ -137,17 +158,20 @@ def _length_target(length):
             lo, hi = int(num1 * (1 - tol)), None
         else:
             lo, hi = int(num1 * (1 - tol)), math.ceil(num1 * (1 + tol))  # exact target
-            ceiling = _AFTER_CEILING_NUM_RE.search(text_after)  # "1000 words (max 1200)"
-            if ceiling:
-                try:
-                    hi = max(hi, _parse_number(ceiling.group(1)))
-                except (ValueError, OverflowError):
-                    pass
-        found = True
-        low = max(low, lo)
-        if hi is not None:
-            high = hi if high is None else min(high, hi)
-    if not found or (high is not None and low > high):
+        # A limit stated after the count without a unit: "1000 words (max 1200)", "1000 words max, 800 min".
+        floor, ceiling = _after_limits(text_after)
+        if ceiling is not None:
+            hi = ceiling
+            if lo > hi:
+                lo = int(hi * (1 - tol))
+        if floor is not None and (hi is None or int(floor * (1 - tol)) <= hi):
+            lo = max(lo, int(floor * (1 - tol)))
+        new_low = max(low, lo)
+        new_high = hi if high is None else (high if hi is None else min(high, hi))
+        if new_high is not None and new_low > new_high:
+            continue  # contradicts an earlier count: the earlier one stands
+        found, low, high = True, new_low, new_high
+    if not found:
         return None
     return unit, low, high
 
@@ -261,14 +285,16 @@ def check_citations(content, dossier):
         url = src.get("url") or ""
         host = (urlparse(url).hostname or "").lower().removeprefix("www.") if url else ""
         title = src.get("title") or ""
-        if (url and url.lower() in lowered) or (host and host in lowered):
+        if (url and url.lower() in lowered) or (host and re.search(rf"(?<![a-z0-9-]){re.escape(host)}(?![a-z0-9-])", lowered)):
             return _passed("citations_present")
         # A multi-word title counts when quoted as written; any title counts as a name on word edges.
         if " " in title.strip() and re.search(rf"(?<!\w){re.escape(title.strip().lower())}(?!\w)", lowered):
             return _passed("citations_present")
         label = _normalized(_host_label(host))
         name = _normalized(title)
-        if (len(label) >= 4 and _label_cited(label, content)) or (name and _label_cited(name, content)):
+        # A lone-word title ("Home") is too common to prove a citation: it needs six letters.
+        name_ok = len(name) >= (4 if " " in title.strip() else 6)
+        if (len(label) >= 4 and _label_cited(label, content)) or (name_ok and _label_cited(name, content)):
             return _passed("citations_present")
     return CheckResult(
         "citations_present",

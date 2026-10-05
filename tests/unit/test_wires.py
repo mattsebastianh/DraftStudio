@@ -82,3 +82,20 @@ def test_both_agents_tool_definitions_mirror_the_wire(wire_id):
         assert set(params["properties"]) == set(schema["properties"]), (agent, tool_name)
         assert set(params.get("required", [])) == set(schema.get("required", [])), (agent, tool_name)
         assert params.get("additionalProperties") is False, (agent, tool_name)
+
+
+def _without_descriptions(node):
+    if isinstance(node, dict):
+        return {k: _without_descriptions(v) for k, v in node.items() if k not in ("description", "example")}
+    if isinstance(node, list):
+        return [_without_descriptions(v) for v in node]
+    return node
+
+
+@pytest.mark.parametrize("agent,tool_name", [("ResearchAgent", "send_to_DraftAgent"), ("DraftAgent", "receive_from_ResearchAgent")])
+def test_dossier_tool_definitions_carry_the_wires_nested_constraints(agent, tool_name):
+    """findings need claim + sources (>=1) + confidence, and every source needs a url, exactly as the wire says."""
+    props = tool_params(agent, tool_name)["properties"]["dossier"]["properties"]
+    wire_props = wires.message_schema("ResearchAgent_to_DraftAgent")["properties"]
+    for key in ("findings", "gaps", "sources"):
+        assert _without_descriptions(props[key]) == _without_descriptions(wire_props[key]), (agent, key)

@@ -246,7 +246,10 @@ def main():
     if len(sys.argv) < 2:
         sys.exit("usage: run_pipeline.py '<client request>'")
     env = config.load_env()
-    run(sys.argv[1], LLMClient(env), env)
+    log = run(sys.argv[1], LLMClient(env), env)
+    if log.get("escalated"):
+        print(f"ESCALATED: no deliverable; a human must review run {log['run_id']}", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

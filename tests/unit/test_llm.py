@@ -235,6 +235,13 @@ def test_provider_specific_400_such_as_a_retired_model_switches_provider():
     assert post.urls == ["https://groq.test/v1", "https://or.test/v1"]
 
 
+def test_a_400_that_merely_names_the_model_does_not_switch_provider():
+    post = FakePost(LLMHTTPError(400, "This model's maximum context length is 8192 tokens"))
+    with pytest.raises(LLMHTTPError):
+        make_client(post, OPENROUTER_ENV).chat_structured(MSGS, SCHEMA, "R", 1000)
+    assert post.urls == ["https://groq.test/v1"]
+
+
 def test_requests_per_day_quota_falls_back_to_the_fallback_model():
     post = FakePost(LLMHTTPError(429, "Rate limit reached on requests per day (RPD): Limit 1000"), body('{"score": 1}'))
     make_client(post, OPENROUTER_ENV).chat_structured(MSGS, SCHEMA, "R", 1000)

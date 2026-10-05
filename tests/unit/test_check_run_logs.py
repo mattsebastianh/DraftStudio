@@ -97,3 +97,9 @@ def test_unreadable_and_invalid_logs_fail_without_stopping_the_batch(tmp_path, c
     assert f"FAIL {missing}\n   - could not read run log: FileNotFoundError" in out
     assert f"FAIL {wrong_shape}\n   - could not read run log: AttributeError" in out
     assert f"PASS {good}" in out and "Traceback" not in out
+
+
+def test_an_escalated_run_is_a_problem():
+    from harness import check_run_logs
+
+    assert any("escalated" in p for p in check_run_logs.check({"steps": [], "escalated": True}))

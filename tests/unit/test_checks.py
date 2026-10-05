@@ -322,7 +322,8 @@ def test_positive_floors_and_exact_bands_are_unchanged():
         ("1000 words (max 1200)", 1250, False),
         ("500 words max", 520, False),
         ("Keep it under 5 sections. Use 300 words", 310, True),
-        ("Max 2 paragraphs, 150 words", 160, False),
+        ("Max 2 paragraphs, 150 words", 160, True),
+        ("Max 2 paragraphs, 150 words", 300, False),
     ],
 )
 def test_length_hints_bind_to_their_own_count(length, words, passed):
@@ -336,9 +337,9 @@ def test_short_acronym_key_points_are_enforced():
 
 
 def test_short_source_title_needs_word_edges():
-    dossier = {"sources": [{"title": "AI", "url": "https://example.org/x"}]}
+    dossier = {"sources": [{"title": "Reuters", "url": "https://example.org/x"}]}
     assert not check({}, "He said homework is due, and the maid waited", dossier)["citations_present"].passed
-    assert check({}, "As reported by AI, costs fell", dossier)["citations_present"].passed
+    assert check({}, "As reported by Reuters, costs fell", dossier)["citations_present"].passed
 
 
 @pytest.mark.parametrize(
@@ -365,3 +366,27 @@ def test_length_phrasings_hyphen_plus_thousands_and_hint_bleed(length, words, pa
 
 def test_decimal_k_counts_still_parse():
     assert checks._length_target("1.5k words") == ("words", 1275, 1725)
+
+
+@pytest.mark.parametrize(
+    "length, words, passed",
+    [
+        ("max 3 sections, 800 words", 800, True),
+        ("max 3 sections, 800 words", 200, False),
+        ("1000 words max, 800 min", 900, True),
+        ("1000 words max, 800 min", 500, False),
+        ("1000 words max, 800 min", 1100, False),
+        ("2000 words, but no more than 1500", 1450, True),
+        ("2000 words, but no more than 1500", 1800, False),
+        ("a 300 word email, max 100 words intro", 300, True),
+        ("a 300 word email, max 100 words intro", 100, False),
+    ],
+)
+def test_noun_limits_unitless_limits_and_contradictions(length, words, passed):
+    assert check({"length": length}, "w " * words)["length"].passed is passed
+
+
+def test_host_citation_needs_word_edges_and_short_titles_are_not_enough():
+    ux = {"sources": [{"title": "Home", "url": "https://ux.com/x"}]}
+    assert not check({}, "see linux.com; Home is where the heart is", ux)["citations_present"].passed
+    assert check({}, "see docs.ux.com for details", ux)["citations_present"].passed
