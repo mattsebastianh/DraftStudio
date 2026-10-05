@@ -7,7 +7,7 @@ itself see [docs/n8n_workflow_design.md](../docs/n8n_workflow_design.md).
 |---|---|
 | **Package source check** | 2026-09-29. Packages fetched with `npm pack` into a scratch directory and read only; no package code was run. |
 | **Later additions** | Telegram, OpenRouter, the extra Respond and IF nodes: checked against the n8n-mcp node catalog (`get_node`) and by live runs, **not** against package source (table below marks each). |
-| **Live runs** | Local n8n 2.x, executions 370-380. |
+| **Live runs** | Local n8n 2.x, executions 370-380. The modernized workflow (prompts and parsers following `agents/*`, harness checks, Verify Research) was imported as a separate copy and run on `n8nio/n8n:2.20.11`, executions 401-403 (2026-10-05): the new expressions (lookbehind regexes, `matchAll`, `try`/`catch`, destructuring) evaluate correctly in that engine. |
 
 ## 1. Package versions
 
@@ -30,10 +30,10 @@ relevant). A key passes if it is a property `name` in the node's description for
 |---|---|---|---|---|---|
 | Webhook | `n8n-nodes-base.webhook` | 2 | 1, 1.1, 2, 2.1 | OK: `httpMethod`, `path`, `responseMode` (`responseNode`), `options`; `webhookId` is node-level | pkg |
 | Manual Trigger | `n8n-nodes-base.manualTrigger` | 1 | 1 | OK (no parameters) | pkg, live |
-| Test Input, Normalize Request, Telegram Input, Build Draft Input, Deterministic Checks, Compute Verdict, Prepare Revision | `n8n-nodes-base.set` | 3.4 | 3 … 3.5 (2.15.1 stops at 3.4) | OK: `mode` (`manual`), `assignments` (3.3+), `includeOtherFields` (3.3+), `options`; assignment types string, number, boolean, array, object | pkg, live |
+| Test Input, Normalize Request, Telegram Input, Verify Research, Build Draft Input, Deterministic Checks, Compute Verdict, Prepare Revision | `n8n-nodes-base.set` | 3.4 | 3 … 3.5 (2.15.1 stops at 3.4) | OK: `mode` (`manual`), `assignments` (3.3+), `includeOtherFields` (3.3+), `options`; assignment types string, number, boolean, array, object | pkg, live |
 | Needs Research?, Approved?, Rounds Left?, Has Request Text?, Intake Reply Unparseable?, Reply on Telegram? (×4), More Text? (×2) | `n8n-nodes-base.if` | 2.2 | 1, 2, 2.1, 2.2, 2.3 | OK: `conditions` (filter v2, matches `conditions.options.version: 2`), `looseTypeValidation` (2.1+), `options` | pkg (first three), live |
 | IntakeAgent, DraftAgent, ReviewAgent, DispatchAgent | `@n8n/n8n-nodes-langchain.chainLlm` | 1.5 | 1 … 1.9 | OK: `promptType` (`define`), `text`, `hasOutputParser`, `needsFallback` (hidden only for 1, 1.1, 1.3), `messages.messageValues[].{type, message}` | pkg, live |
-| ResearchAgent | `@n8n/n8n-nodes-langchain.agent` | **2.2** (was 1.7) | V1: 1-1.9 · V2: 2, 2.1, 2.2 · V3: 3, 3.1 | OK: `promptType`, `text`, `needsFallback` (2.1+), `options.systemMessage`, `options.maxIterations`. The `agent: toolsAgent` key was removed (V2 is always the Tools Agent) | pkg, live |
+| ResearchAgent | `@n8n/n8n-nodes-langchain.agent` | **2.2** (was 1.7) | V1: 1-1.9 · V2: 2, 2.1, 2.2 · V3: 3, 3.1 | OK: `promptType`, `text`, `needsFallback` (2.1+), `options.systemMessage`, `options.maxIterations`, `options.returnIntermediateSteps` (catalog, 2026-10-05). The `agent: toolsAgent` key was removed (V2 is always the Tools Agent) | pkg, live |
 | Groq Intake / Research / Draft / Dispatch | `@n8n/n8n-nodes-langchain.lmChatGroq` | 1 | 1 | OK: `model` (a string ID is valid), `options.maxTokensToSample`, `options.temperature` (0-1, one decimal) | pkg, live |
 | OpenRouter Review, OpenRouter Fallback Intake / Research / Draft / Review / Dispatch | `@n8n/n8n-nodes-langchain.lmChatOpenRouter` | 1 | 1 | OK: `model`, `options.maxTokens`, `options.temperature` | catalog, live (Review 379-380, fallback 378) |
 | Intake / Draft / Review / Dispatch Parser | `@n8n/n8n-nodes-langchain.outputParserStructured` | 1.2 | 1 … 1.3 | OK: `schemaType` (`manual`), `inputSchema` | pkg, live |
@@ -89,3 +89,10 @@ index (0 = Chat Model, 1 = Fallback Model); both are `required` when `needsFallb
 |---|---|
 | 2026-09-29 | Initial package-source verification; node versions fixed; Groq `qwen/qwen3.8-27b` fallback nodes added; `maxTokensToSample` set (Intake 4000, Research 12000, Draft 12000, Review 10000, Dispatch 3000); `.item` → `.last()` in loop references (Compute Verdict 14 uses, Respond Delivered 6) |
 | 2026-09-30 | Groq fallbacks replaced by OpenRouter `openai/gpt-oss-20b` nodes (execution 377: Groq 8000 TPM cap, fallback limited too); Telegram, error-output and quality-gate nodes added; ReviewAgent moved to OpenRouter `qwen/qwen3-235b-a22b-2507` with a `meta-llama/llama-3.3-70b-instruct` fallback; review max tokens 4000; retries 5 × 5 s; ResearchAgent max iterations 10. These were checked against the catalog and live runs, not package source |
+| 2026-10-05 | ResearchAgent `options.returnIntermediateSteps` on (checked against the n8n-mcp catalog); new Set node Verify Research between ResearchAgent's success output and Build Draft Input. Run live in executions 401-403 (intermediate steps returned; Verify Research failure path only, see below) |
+
+## 7. Live run findings (2026-10-05, executions 401-403)
+
+- **Wikipedia tool:** Wikipedia answers HTTP 429 to Node's default User-Agent (`node`, `undici`), which `toolWikipedia` sends and cannot change, so every call failed with `Network response was not ok` and an empty observation. Verify Research then reported no verified dossier and the drafter was told no sources exist (execution 401). The positive path of Verify Research (a finding kept because a tool returned its URL) has therefore not run live yet.
+- **Groq:** every Groq call answered 403 (`Forbidden`), so each agent ran on its OpenRouter fallback; the fallbacks worked.
+- **Gate:** delivered after one revision with two non-blocking `medium` issues (403); escalated with blocking constraint and reviewer issues (401, 402).

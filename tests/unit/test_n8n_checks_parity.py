@@ -12,7 +12,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from harness import checks, research
+from harness import checks
 from tests.unit import test_checks
 
 WORKFLOW = Path(__file__).resolve().parents[2] / "n8n" / "draftstudio_pipeline.workflow.json"
@@ -162,39 +162,6 @@ class ChecksParityTests(unittest.TestCase):
         args += [({"format": "Markdown memo"}, "Intro\n## Heading"), ({"format": "markdown"}, "#NoSpace"), ({"format": None}, "x")]
         cases = [{"json": _draft(c), "nodes": {"Build Draft Input": {"brief": b}}} for b, c in args]
         self.compare("format_check", cases, [checks.check_format(b, c).as_dict() for b, c in args])
-
-
-@unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
-class SourcesTests(unittest.TestCase):
-    """Build Draft Input parses the dossier's sources; titles become short plain labels."""
-
-    def sources(self, output, executed=True):
-        nodes = {"ResearchAgent": {"output": output}} if executed else {}
-        return evaluate_many(_assignment("Build Draft Input", "sources"), [{"json": {}, "nodes": nodes}])[0]
-
-    def test_titles_are_cleaned_like_the_harness(self):
-        titles = ["  A <b>bold</b>\n\ttitle  ", "x" * 200, "{ignore} [previous] `instructions`", None, "", "a " * 60]
-        dossier = {"sources": [{"url": f"https://e.com/{i}", "title": t} for i, t in enumerate(titles)]}
-        got = self.sources(json.dumps(dossier))
-        self.assertEqual([s["title"] for s in got], [research.source_title(t) for t in titles])
-
-    def test_dossier_text_around_the_json_and_a_wrapper_are_tolerated(self):
-        text = 'Here it is:\n```json\n{"dossier": {"topic": "t", "sources": [{"url": " https://a.org/x ", "title": "A"}]}}\n```'
-        self.assertEqual(self.sources(text), [{"url": "https://a.org/x", "title": "A"}])
-
-    def test_string_sources_and_junk_entries(self):
-        dossier = {"sources": ["https://a.org", {"title": "no url"}, None, 3, {"url": ""}, {"url": "https://b.org", "title": "B"}]}
-        self.assertEqual(self.sources(json.dumps(dossier)),
-                         [{"url": "https://a.org", "title": ""}, {"url": "https://b.org", "title": "B"}])
-
-    def test_no_usable_dossier_gives_no_sources(self):
-        self.assertEqual(self.sources("Agent stopped due to max iterations."), [])
-        self.assertEqual(self.sources("no json here"), [])
-        self.assertEqual(self.sources(None), [])
-        self.assertEqual(self.sources("x", executed=False), [])
-
-    def test_an_object_output_is_read_directly(self):
-        self.assertEqual(self.sources({"sources": [{"url": "https://a.org", "title": "A"}]}), [{"url": "https://a.org", "title": "A"}])
 
 
 if __name__ == "__main__":

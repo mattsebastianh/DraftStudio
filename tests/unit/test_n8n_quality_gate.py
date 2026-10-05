@@ -271,9 +271,10 @@ class ResearchFailureTests(unittest.TestCase):
         self.assertEqual(self.run_field("dossier", out), "")
         self.assertTrue(self.run_field("research_failed", out))
 
-    def test_real_dossier_passes_through(self):
-        self.assertEqual(self.run_field("dossier", "Findings: ..."), "Findings: ...")
-        self.assertFalse(self.run_field("research_failed", "Findings: ..."))
+    def test_unverified_research_is_a_failure(self):
+        # Only Verify Research's verified dossier reaches DraftAgent (tests/unit/test_n8n_research.py).
+        self.assertEqual(self.run_field("dossier", "Findings: ..."), "")
+        self.assertTrue(self.run_field("research_failed", "Findings: ..."))
 
     def test_no_research_is_not_a_failure(self):
         self.assertEqual(self.run_field("dossier", executed=False), "")
