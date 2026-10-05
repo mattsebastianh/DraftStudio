@@ -191,7 +191,7 @@ def check_length(brief, content):
     return CheckResult(
         "length",
         False,
-        "critical",  # a stated length is a hard constraint, so it blocks approval
+        "high",  # shown to the reviser but not blocking until IntakeAgent gives structured limits (issue #9)
         f"Draft is {size} {unit}; the brief allows {allowed} {unit}.",
         f"Rewrite to {allowed} {unit}.",
     )
@@ -355,7 +355,7 @@ def finalize_review(llm_review, results, threshold):
         if isinstance(req, dict) and req.get("passed") is False:
             issues.append(
                 {
-                    "severity": "critical",  # a stated requirement the reviewer marked unmet blocks approval
+                    "severity": "high",  # the reviser sees it; only code-verified checks and critical issues block
                     "category": "requirement_failed",
                     "description": f"Requirement not met: {req.get('requirement', '(unnamed)')}",
                     "suggested_fix": "Revise the draft so that it meets this requirement.",

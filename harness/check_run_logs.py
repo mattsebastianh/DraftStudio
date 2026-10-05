@@ -36,6 +36,10 @@ def check(log):
         problems.append(f"run failed: {log['error']}")
     if log.get("escalated"):
         problems.append("A4: run escalated to a human (revision cycles exhausted); there is no deliverable")
+    elif "error" not in log and not log.get("deliverable"):
+        problems.append("A4: run produced no deliverable (interrupted or incomplete)")
+    for flag in log.get("flags", []):
+        problems.append(f"A4: flagged for a human: {flag}")
     for step in log.get("steps", []):
         agent = step.get("agent", "?")
         if step.get("skipped"):  # research that made no dossier call (no search key, nothing retrieved)

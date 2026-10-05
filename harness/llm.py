@@ -264,7 +264,7 @@ class LLMClient:
                     raise LLMHTTPError(502, "response without choices: " + json.dumps(body)[:300])
                 return body, model
             except LLMHTTPError as err:
-                low = err.detail.lower()
+                low = _error_text(err.detail)  # never the model text in failed_generation
                 if err.code == 429 and ("tokens per day" in low or "requests per day" in low):
                     if provider.fallback_model and model != provider.fallback_model:
                         self.log(f"    {model} hit its daily token quota, falling back to {provider.fallback_model}")

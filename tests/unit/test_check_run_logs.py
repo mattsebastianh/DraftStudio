@@ -15,7 +15,7 @@ SKIPPED_RESEARCH = {"agent": "ResearchAgent", "skipped": True, "output": {"findi
 
 
 def log_with(*steps, **extra):
-    return {"steps": list(steps), **extra}
+    return {"steps": list(steps), "deliverable": "deliverables/x.md", **extra}
 
 
 def problems(*steps, **extra):
@@ -103,3 +103,11 @@ def test_an_escalated_run_is_a_problem():
     from harness import check_run_logs
 
     assert any("escalated" in p for p in check_run_logs.check({"steps": [], "escalated": True}))
+
+
+def test_a_run_without_a_deliverable_is_a_problem():
+    assert any("no deliverable" in p for p in check_run_logs.check({"steps": [STEP, REVIEW]}))
+
+
+def test_flags_for_a_human_are_problems():
+    assert any("research confidence 30" in p for p in problems(STEP, REVIEW, flags=["research confidence 30 < 60"]))

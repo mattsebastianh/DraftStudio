@@ -34,10 +34,11 @@ def test_non_critical_failure_adds_issue_but_does_not_block():
     assert any(i["category"] == "deterministic:key_points_covered" for i in out["issues"])
 
 
-def test_length_violation_blocks_even_with_a_high_score():
+def test_length_violation_is_a_high_issue_that_does_not_block_yet():
+    """Until IntakeAgent gives structured limits (issue #9), a parsed length miss guides the reviser only."""
     out = checks.finalize_review(REVIEW, results_for("# T\n\nshort", brief={"length": "500 words"}), 80)
-    assert out["status"] == "revision_required"
-    assert any(i["category"] == "deterministic:length" and i["severity"] == "critical" for i in out["issues"])
+    assert out["status"] == "approved"
+    assert any(i["category"] == "deterministic:length" and i["severity"] == "high" for i in out["issues"])
 
 
 def test_low_score_without_issues_gets_a_synthesized_issue():
@@ -105,10 +106,10 @@ def test_missing_issues_mean_none_but_a_non_list_fails_closed():
         assert any(i["category"] == "malformed_review" for i in out["issues"])
 
 
-def test_a_failed_requirement_blocks_approval():
+def test_a_failed_requirement_is_reported_but_does_not_override_the_code_checks():
     review = dict(REVIEW, requirements=[{"requirement": "cover SMB exemptions", "passed": False}, {"requirement": "x", "passed": True}])
     out = _clean(review)
-    assert out["status"] == "revision_required"
+    assert out["status"] == "approved"
     assert [i["description"] for i in out["issues"] if i["category"] == "requirement_failed"] == ["Requirement not met: cover SMB exemptions"]
 
 

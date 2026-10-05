@@ -134,3 +134,21 @@ def test_source_titles_are_short_plain_labels():
     assert len(title) <= research.SOURCE_TITLE_CHARS
     assert not any(ch in title for ch in "<>{}[]`")
     assert research.source_title(None) == ""
+
+
+def test_a_provider_error_in_the_tool_loop_fails_soft():
+    from harness.llm import LLMHTTPError
+
+    class Boom:
+        def chat_with_tools(self, *a, **k):
+            raise LLMHTTPError(400, "tool_use_failed")
+
+    class Box:
+        evidence = {}
+
+        def run(self, *a):
+            return ""
+
+    dossier, meta = research.run_research(Boom(), {}, "sys", {"topic": "t"}, toolbox=Box())
+    assert meta["skipped"] is True and "tool loop failed" in meta["reason"]
+    assert dossier["findings"] == [] and dossier["topic"] == "t"

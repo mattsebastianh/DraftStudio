@@ -6,7 +6,7 @@ import json
 import re
 
 from harness import config, schemas, tools
-from harness.llm import build_messages
+from harness.llm import LLMHTTPError, build_messages
 from harness.urls import normalize_url
 
 TOOL_TURN_MAX_TOKENS = 4_000  # tool-calling turns are short; the dossier call gets the agent's full budget
@@ -88,9 +88,14 @@ def run_research(client, env, system_prompt, wire_message, toolbox=None):
         + tools.UNTRUSTED_NOTE
         + " When you have enough evidence, stop calling tools and summarize what you found, citing the URLs."
     )
-    _, final, loop_meta = client.chat_with_tools(
-        build_messages(system_prompt, search_prompt), tools.tool_defs(), toolbox.run, config.MAX_TOOL_CALLS, TOOL_TURN_MAX_TOKENS, effort
-    )
+    try:
+        _, final, loop_meta = client.chat_with_tools(
+            build_messages(system_prompt, search_prompt), tools.tool_defs(), toolbox.run, config.MAX_TOOL_CALLS, TOOL_TURN_MAX_TOKENS, effort
+        )
+    except LLMHTTPError as err:  # research fails soft: draft without a dossier, the gap is recorded
+        reason = f"research tool loop failed ({err})"[:300]
+        meta = {"skipped": True, "reason": reason, "dropped_findings": 0, "sources_retrieved": len(toolbox.evidence), "retrieved_urls": [], "tool_calls": []}
+        return empty_dossier(topic, reason), meta
     meta = {
         "skipped": False,
         "sources_retrieved": len(toolbox.evidence),

@@ -34,7 +34,7 @@ def test_length_range_with_tolerance():
 
 def test_length_single_number_and_severity():
     r = check({"length": "about 500 words"}, "w " * 200)["length"]
-    assert not r.passed and r.severity == "critical" and "200" in r.detail
+    assert not r.passed and r.severity == "high" and "200" in r.detail
 
 
 def test_length_accepts_integer():
