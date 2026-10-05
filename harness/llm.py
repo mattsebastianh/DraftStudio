@@ -24,6 +24,9 @@ MAX_RETRY_AFTER_SECONDS = 120
 _TPM_LIMIT_RE = re.compile(r"limit\s+(\d+),\s*requested\s+(\d+)", re.IGNORECASE)
 
 
+PROVIDER_FAULT_WORDS = ("model", "decommission", "deprecat", "not found", "does not exist", "access", "tool_use_failed")
+
+
 class LLMHTTPError(Exception):
     """HTTP failure from a model API. code == 0 means a connection-level error."""
 
@@ -206,8 +209,10 @@ class LLMClient:
                 body, model = self._complete_on(provider, messages, max_tokens, response_format, tools, reasoning_effort)
                 break
             except LLMHTTPError as err:
-                # A request the provider rejected as malformed would fail anywhere: no switch.
-                if err.code in (400, 422) and "tool_use_failed" not in err.detail.lower():
+                # A request the provider rejected as malformed would fail anywhere: no switch. A complaint about
+                # the provider's own setup (retired or unknown model, access) is not the request's fault.
+                low = err.detail.lower()
+                if err.code in (400, 422) and not any(word in low for word in PROVIDER_FAULT_WORDS):
                     raise
                 if self._current + 1 == len(self.providers):
                     raise
@@ -246,7 +251,7 @@ class LLMClient:
                 return body, model
             except LLMHTTPError as err:
                 low = err.detail.lower()
-                if err.code == 429 and "tokens per day" in low:
+                if err.code == 429 and ("tokens per day" in low or "requests per day" in low):
                     if provider.fallback_model and model != provider.fallback_model:
                         self.log(f"    {model} hit its daily token quota, falling back to {provider.fallback_model}")
                         provider.model = provider.fallback_model
@@ -332,6 +337,7 @@ class LLMClient:
                 schema_note = "Return one JSON object matching this JSON Schema:\n" + json.dumps(schema)
                 return messages + [{"role": "user", "content": schema_note}], {"type": "json_object"}, mode
 
+            started = time.time()
             try:
                 res = self.complete(messages, budget, reasoning_effort=reasoning_effort, prepare=prepare)
             except SchemaUnsupported as err:
@@ -342,6 +348,8 @@ class LLMClient:
                 continue
             except InvalidGeneration as err:
                 meta["finish_reasons"].append("invalid_generation")
+                meta["seconds"] = round(meta["seconds"] + time.time() - started, 1)  # the rejected call's tokens are unknown
+                meta["provider"], meta["model"] = self.provider.name, self.active_model
                 raw, errors = err.raw, []
                 if raw:  # name the real problems in the failed generation
                     data, _, error = self._parse(raw)
@@ -383,7 +391,7 @@ class LLMClient:
         longer offered; after max_calls + 2 turns the loop stops even if the model keeps asking.
         """
         messages = list(messages)
-        meta = {"tool_calls": [], "seconds": 0.0, "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
+        meta = {"tool_calls": [], "seconds": 0.0, "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}, "truncated_turns": 0}
         calls = 0
         for _ in range(max_calls + 2):
             res = self.complete(messages, max_tokens, tools=tools if calls < max_calls else None, reasoning_effort=reasoning_effort)
@@ -393,11 +401,18 @@ class LLMClient:
             requested = res["message"].get("tool_calls") or []
             if not requested:
                 break
+            truncated = res["finish_reason"] == "length"
+            if truncated:  # the arguments are cut off; the turn spends tool budget so the loop cannot spin on it
+                meta["truncated_turns"] += 1
+                calls += 1
+                self.log(f"    tool-call turn truncated at max_tokens={max_tokens}")
             messages.append({"role": "assistant", "content": res["content"], "tool_calls": requested})
             for call in requested:
                 function = call.get("function") or {}
                 name = function.get("name", "")
-                if calls >= max_calls:
+                if truncated:
+                    result = "error: your tool call was cut off; answer with the evidence you have"
+                elif calls >= max_calls:
                     result = "error: tool budget exhausted; answer with the evidence you have"
                 else:
                     try:

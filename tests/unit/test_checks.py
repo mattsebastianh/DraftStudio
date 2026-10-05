@@ -339,3 +339,29 @@ def test_short_source_title_needs_word_edges():
     dossier = {"sources": [{"title": "AI", "url": "https://example.org/x"}]}
     assert not check({}, "He said homework is due, and the maid waited", dossier)["citations_present"].passed
     assert check({}, "As reported by AI, costs fell", dossier)["citations_present"].passed
+
+
+@pytest.mark.parametrize(
+    "length, words, passed",
+    [
+        ("500 words max, at least 300 words", 450, True),
+        ("500 words max, at least 300 words", 600, False),
+        ("500 words max, at least 300 words", 200, False),
+        ("800 words min, 300 words per section", 900, True),
+        ("500-word blog post", 500, True),
+        ("500-word blog post", 100, False),
+        ("a 300-400 word post", 350, True),
+        ("a 300-400 word post", 100, False),
+        ("1000+ words", 1500, True),
+        ("1000+ words", 200, False),
+        ("1.000 words", 1000, True),
+        ("1.000 words", 200, False),
+        ("2.500 words", 2500, True),
+    ],
+)
+def test_length_phrasings_hyphen_plus_thousands_and_hint_bleed(length, words, passed):
+    assert check({"length": length}, "w " * words)["length"].passed is passed
+
+
+def test_decimal_k_counts_still_parse():
+    assert checks._length_target("1.5k words") == ("words", 1275, 1725)

@@ -228,6 +228,29 @@ def test_request_specific_rejection_does_not_switch_provider():
     assert post.urls == ["https://groq.test/v1"] and client.fallback_provider_used is None
 
 
+def test_provider_specific_400_such_as_a_retired_model_switches_provider():
+    post = FakePost(LLMHTTPError(400, '{"error": {"code": "model_decommissioned", "message": "model retired"}}'), body('{"score": 1}'))
+    client = make_client(post, OPENROUTER_ENV)
+    client.chat_structured(MSGS, SCHEMA, "R", 1000)
+    assert post.urls == ["https://groq.test/v1", "https://or.test/v1"]
+
+
+def test_requests_per_day_quota_falls_back_to_the_fallback_model():
+    post = FakePost(LLMHTTPError(429, "Rate limit reached on requests per day (RPD): Limit 1000"), body('{"score": 1}'))
+    make_client(post, OPENROUTER_ENV).chat_structured(MSGS, SCHEMA, "R", 1000)
+    assert [p["model"] for p in post.payloads] == ["primary/model", "fallback/model"]
+
+
+def test_rejected_generation_still_counts_its_time_and_provider():
+    bad = LLMHTTPError(
+        400, '{"error": {"message": "Failed to generate JSON", "type": "invalid_request_error", '
+        '"code": "json_validate_failed", "failed_generation": "{\\"score\\": \\"x\\"}"}}'
+    )
+    post = FakePost(bad, body('{"score": 1}'))
+    _, meta = make_client(post, OPENROUTER_ENV).chat_structured(MSGS, SCHEMA, "R", 1000)
+    assert meta["validation_retries"] == 1 and meta["provider"] == "groq" and "invalid_generation" in meta["finish_reasons"]
+
+
 def test_without_a_real_openrouter_key_the_groq_error_propagates():
     env = {**OPENROUTER_ENV, "OPENROUTER_API_KEY": "your-openrouter-api-key-here"}
     post = FakePost(LLMHTTPError(403, DENIED))

@@ -12,7 +12,8 @@ PLACEHOLDER_RE = re.compile(
     r"(?-i:\bTODO\b|\bTBD\b|\bXXX\b)|lorem ipsum|\[\s*(?:insert|your|link|url|company name|name|date)\b[^\]]*\](?!\()",
     re.IGNORECASE,
 )
-_UNIT_SPAN_RE = re.compile(r"(\d+(?:[,.]\d+)*k?)\s*(?:(?:-|–|—|to)\s*(\d+(?:[,.]\d+)*k?)\s*)?(words?|characters?|chars?)\b", re.IGNORECASE)
+# "500 words", "500-word post", "300-400 words", "1000+ words" (the plus is read as a floor)
+_UNIT_SPAN_RE = re.compile(r"(\d+(?:[,.]\d+)*k?)\s*\+?\s*(?:(?:-|–|—|to)\s*(\d+(?:[,.]\d+)*k?)\s*)?[\s-]*(words?|characters?|chars?)\b", re.IGNORECASE)
 _NUMBER = r"\d+(?:[,.]\d+)*k?"
 _BETWEEN_RE = re.compile(rf"\bbetween\s+({_NUMBER})\s+and\s+({_NUMBER})\s*(words?|characters?|chars?)\b", re.IGNORECASE)
 # Hints that bind anywhere in the count's sentence before it ("Max 2 paragraphs, 150 words"), or right after it.
@@ -39,6 +40,7 @@ _AFTER_CEILING_NUM_RE = re.compile(
     rf"^[\s(,–-]*(?:max(?:imum)?|at most|up to|no more than)\s*(?:of\s*)?({_NUMBER})\s*(?:words?|characters?|chars?)?\s*(?:[).,;]|$)",
     re.IGNORECASE,
 )
+_CLAUSE_END_RE = re.compile(r"[,;]\s*")
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;])\s+|\n")
 MAX_PLAUSIBLE_COUNT = 10**12
 
@@ -69,7 +71,10 @@ def _passed(check_id, detail="ok"):
 
 def _parse_number(num_str):
     """Parse a number string, handling commas and 'k' suffix (e.g. '1.5k' -> 1500)."""
-    num_str = num_str.replace(",", "").lower()
+    num_str = num_str.lower()
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", num_str):  # "1.000" / "2.500": the European thousands separator
+        num_str = num_str.replace(".", "")
+    num_str = num_str.replace(",", "")
     value = float(num_str.rstrip("k"))
     if num_str.endswith("k"):
         value *= 1000
@@ -111,7 +116,10 @@ def _length_target(length):
         # Each count reads only the text between its neighbouring counts, cut to its own sentence.
         before_start = matches[index - 1].end() if index else 0
         after_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        text_before = _SENTENCE_SPLIT_RE.split(text[before_start : match.start()])[-1]
+        between = text[before_start : match.start()]
+        if index:  # the previous count's trailing hint ("500 words max,") is not this count's
+            between = _CLAUSE_END_RE.split(between, maxsplit=1)[-1]
+        text_before = _SENTENCE_SPLIT_RE.split(between)[-1]
         text_after = _SENTENCE_SPLIT_RE.split(text[match.end() : after_end])[0]
         if _PER_ITEM_AFTER_RE.search(text_after[:16]) or _PER_ITEM_BEFORE_RE.search(text_before):
             continue
@@ -125,7 +133,7 @@ def _length_target(length):
             lo, hi = int(lo * (1 - tol)), math.ceil(hi * (1 + tol))
         elif _AT_MOST_RE.search(text_before) or _AT_MOST_BEFORE_RE.search(text_before) or _AFTER_CEILING_RE.search(text_after) or _AT_MOST_AFTER_RE.search(text_after):
             lo, hi = 0, num1  # an explicit ceiling gets no tolerance above it
-        elif _AT_LEAST_RE.search(text_before) or _AT_LEAST_BEFORE_RE.search(text_before) or _AFTER_FLOOR_RE.search(text_after) or _AT_LEAST_AFTER_RE.search(text_after):
+        elif "+" in match.group(0) or _AT_LEAST_RE.search(text_before) or _AT_LEAST_BEFORE_RE.search(text_before) or _AFTER_FLOOR_RE.search(text_after) or _AT_LEAST_AFTER_RE.search(text_after):
             lo, hi = int(num1 * (1 - tol)), None
         else:
             lo, hi = int(num1 * (1 - tol)), math.ceil(num1 * (1 + tol))  # exact target

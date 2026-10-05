@@ -58,3 +58,16 @@ def test_bad_tool_arguments_are_reported_not_raised():
         )
         assert messages[-2]["content"].startswith("error: invalid tool arguments")
         assert meta["tool_calls"] == []
+
+
+def test_truncated_tool_call_turn_spends_budget_and_is_reported():
+    cut = [{"id": "c1", "type": "function", "function": {"name": "web_search", "arguments": '{"query": "half'}}]
+    post = FakePost(body("", finish="length", tool_calls=cut), body("answer"))
+    calls = []
+    messages, final, meta = make_client(post).chat_with_tools(
+        build_messages("s", "u"), TOOLS, lambda n, a: calls.append(a) or "R", max_calls=1, max_tokens=500
+    )
+    assert calls == [] and meta["truncated_turns"] == 1
+    assert "tools" not in post.payloads[1]  # the budget is spent, so tools are withdrawn
+    assert any("cut off" in m["content"] for m in messages if m["role"] == "tool")
+    assert final["content"] == "answer"

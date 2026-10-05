@@ -29,3 +29,8 @@ def test_unbalanced_raises():
 def test_extract_json_ignores_braces_inside_strings():
     assert extract_json('Here: {"draft": {"content": "use } and { here"}} done') == {"draft": {"content": "use } and { here"}}
     assert extract_json('{"a": "quote \\" } still inside"}') == {"a": 'quote " } still inside'}
+
+
+def test_extract_json_keeps_code_fences_inside_strings():
+    reply = 'Sure:\n```json\n{"content": "Use:\\n```python\\nprint(1)\\n```\\nDone"}\n```'
+    assert extract_json(reply) == {"content": "Use:\n```python\nprint(1)\n```\nDone"}

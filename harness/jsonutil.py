@@ -33,7 +33,7 @@ def _escape_raw_control_chars_in_strings(text):
 
 def extract_json(text):
     """Pull the first JSON object out of a model reply (tolerates fences/prose)."""
-    text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE)
+    text = text.strip()  # fences around the object are skipped by the scan; fences inside strings are content
     start = text.find("{")
     if start == -1:
         raise ValueError("no JSON object in model reply")

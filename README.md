@@ -159,7 +159,7 @@ All 5 agents are built, reviewed, pipeline-tested, and **active**. The full wire
 
 **Provider fallback:** the harness switches to OpenRouter when Groq fails (checked live by forcing an invalid Groq key) and the n8n workflow gives every agent two providers. The unit tests (`.venv/bin/pytest`) cover the wiring, the wire contracts, the harness fallbacks and the review checks.
 
-Planned work: priority handling at intake, `client_id` propagation, multi-channel delivery, giving ReviewAgent the research dossier so it can verify citations, and a second web-search provider behind the same tool interface.
+Planned work: priority handling at intake, `client_id` propagation, multi-channel delivery, structured word-count limits from IntakeAgent, and a second web-search provider behind the same tool interface.
 
 ## Design Principles
 
