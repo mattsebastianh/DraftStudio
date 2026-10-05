@@ -26,7 +26,7 @@ _TPM_LIMIT_RE = re.compile(r"limit\s+(\d+),\s*requested\s+(\d+)", re.IGNORECASE)
 
 PROVIDER_FAULT_WORDS = (
     "model_decommissioned", "decommission", "deprecat", "model_not_found", "model not found", "unknown model",
-    "invalid model", "does not exist", "tool_use_failed", "permission", "unauthorized",
+    "invalid model", "does not exist", "permission", "unauthorized",
 )
 
 
@@ -214,8 +214,9 @@ class LLMClient:
             except LLMHTTPError as err:
                 # A request the provider rejected as malformed would fail anywhere: no switch. A complaint about
                 # the provider's own setup (retired or unknown model, access) is not the request's fault.
-                low = err.detail.lower()
-                if err.code in (400, 422) and not any(word in low for word in PROVIDER_FAULT_WORDS):
+                # Only the error's own code and message are read: failed_generation holds model text.
+                said = f"{_error_field(err.detail, 'code')} {_error_field(err.detail, 'message')}".lower()
+                if err.code in (400, 422) and not any(word in (said.strip() or err.detail.lower()) for word in PROVIDER_FAULT_WORDS):
                     raise
                 if self._current + 1 == len(self.providers):
                     raise

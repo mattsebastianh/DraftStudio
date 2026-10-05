@@ -116,7 +116,7 @@ Each run writes:
 - a full I/O log to `tests/live_runs/run_<timestamp>.json` (per-step provider, model, tokens, timing, validation retries and check results), also when a step fails
 - the approved deliverable to `deliverables/<slug>.md` (never overwriting an existing file)
 
-The harness retries transient errors (TPM 429s, 5xx), falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out, and switches to OpenRouter (`OPENROUTER_PRIMARY_MODEL`) for the rest of the run if Groq is unreachable or refuses the request (for example a regional block). Set `OPENROUTER_API_KEY` in `.env` to enable that second provider. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically (see `CLAUDE.md`) — no manual invocation needed.
+The harness retries transient errors (TPM 429s, 5xx), falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out, and switches to OpenRouter (`OPENROUTER_PRIMARY_MODEL`) for the rest of the run if Groq is unreachable or refuses the request (for example a regional block). Set `OPENROUTER_API_KEY` in `.env` to enable that second provider. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically by the project's claude-code instructions — no manual invocation needed.
 
 ### The n8n workflow
 

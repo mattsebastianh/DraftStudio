@@ -242,6 +242,15 @@ def test_a_400_that_merely_names_the_model_does_not_switch_provider():
     assert post.urls == ["https://groq.test/v1"]
 
 
+def test_tool_use_failed_400_does_not_switch_provider():
+    detail = '{"error": {"code": "tool_use_failed", "message": "bad call", "failed_generation": "permission does not exist"}}'
+    post = FakePost(*[LLMHTTPError(400, detail)] * 5)
+    client = make_client(post, OPENROUTER_ENV)
+    with pytest.raises(LLMHTTPError):
+        client.chat_with_tools(MSGS, [], lambda n, a: "R", max_calls=1, max_tokens=100)
+    assert set(post.urls) == {"https://groq.test/v1"} and client.fallback_provider_used is None
+
+
 def test_requests_per_day_quota_falls_back_to_the_fallback_model():
     post = FakePost(LLMHTTPError(429, "Rate limit reached on requests per day (RPD): Limit 1000"), body('{"score": 1}'))
     make_client(post, OPENROUTER_ENV).chat_structured(MSGS, SCHEMA, "R", 1000)

@@ -18,10 +18,10 @@ _NUMBER = r"\d+(?:[,.]\d+)*k?"
 _BETWEEN_RE = re.compile(rf"\bbetween\s+({_NUMBER})\s+and\s+({_NUMBER})\s*(words?|characters?|chars?)\b", re.IGNORECASE)
 # Hints that bind anywhere in the count's sentence before it ("Max 2 paragraphs, 150 words"), or right after it.
 _AT_MOST_RE = re.compile(
-    r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno (?:more|longer) than\b|\bnot (?:more than|to exceed|exceed(?:ing)?|over|above)\b|(?:\b(?:never|do not|must not|cannot|can not)|n't|can’t) exceed\b|(?:\bnot|\bcannot|n't|’t) be (?:more than|over|above|greater than|longer than)\b|(?:\bnot(?: to)?|n't|’t) go (?:over|above|beyond)\b|\bwithout exceeding\b|\bnot longer than\b|\bat most\b|\bunder\b",
+    r"≤|<=|<(?!=)|\bmax(?:imum)?\b|\bup to\b|\bno (?:more|longer) than\b|\bnot (?:more than|to exceed|exceed(?:ing)?|over|above)\b|(?:\b(?:never|do not|must not|cannot|can not)|n't|can’t) exceed\b|(?:\bnot|\bcannot|n't|’t) be (?:more than|over|above|greater than|longer than)\b|(?:\bnot(?: to)?|n't|’t) go (?:over|above|beyond)\b|\bwithout exceeding\b|\bnot longer than\b|\bat most\b|\bunder\b",
     re.IGNORECASE,
 )
-_AT_LEAST_RE = re.compile(r"≥|>=|\bmin(?:imum)?\b|\bat least\b|\b(?:no|not) (?:less|fewer) than\b", re.IGNORECASE)
+_AT_LEAST_RE = re.compile(r"≥|>=|>(?!=)|\bmin(?:imum)?\b|\bat least\b|\b(?:no|not) (?:less|fewer) than\b", re.IGNORECASE)
 # Weaker words only count when they sit directly before the count ("less than 200 words") or after it ("or fewer").
 _AT_MOST_BEFORE_RE = re.compile(r"(?<!no )(?<!not )\b(?:less than|fewer than|below|within)\s*(?:about\s+|around\s+|~\s*)?$", re.IGNORECASE)
 _AT_LEAST_BEFORE_RE = re.compile(r"(?<!not )(?<!never )(?<!n't )(?<!no )\b(?:more than|over|above|exceeds?)\s*(?:about\s+|around\s+|~\s*)?$", re.IGNORECASE)
@@ -123,14 +123,14 @@ def _length_target(length):
         return "words", int(length * (1 - config.LENGTH_TOLERANCE)), math.ceil(length * (1 + config.LENGTH_TOLERANCE))
 
     # Find unit-bound counts: "between X and Y <unit>", or (number) [number] (unit).
-    text = str(length)
+    text = re.sub(r"\b(max|min)\.", r"\1", str(length), flags=re.IGNORECASE)
     between = _BETWEEN_RE.search(text)
     matches = [between] if between else list(_UNIT_SPAN_RE.finditer(text))
     if not matches:
         return None
     unit = "characters" if matches[0].group(3)[0].lower() == "c" else "words"
     tol = config.LENGTH_TOLERANCE
-    low, high, found = 0, None, False
+    low, high, found, plain = 0, None, False, 0
     for index, match in enumerate(matches):
         if ("characters" if match.group(3)[0].lower() == "c" else "words") != unit:
             continue
@@ -142,6 +142,7 @@ def _length_target(length):
             between = _CLAUSE_END_RE.split(between, maxsplit=1)[-1]
         text_before = _NOUN_LIMIT_RE.sub("", _SENTENCE_SPLIT_RE.split(between)[-1])  # "max 3 sections" is not about words
         text_after = _SENTENCE_SPLIT_RE.split(text[match.end() : after_end])[0]
+        hint_after = _SENTENCE_SPLIT_RE.split(text[match.end() :])[0]  # sees the digit of a following "at most 500"
         if _PER_ITEM_AFTER_RE.search(text_after[:16]) or _PER_ITEM_BEFORE_RE.search(text_before):
             continue
         try:
@@ -152,12 +153,13 @@ def _length_target(length):
         if num2 is not None:
             lo, hi = sorted([num1, num2])
             lo, hi = int(lo * (1 - tol)), math.ceil(hi * (1 + tol))
-        elif _AT_MOST_RE.search(text_before) or _AT_MOST_BEFORE_RE.search(text_before) or _AFTER_CEILING_RE.search(text_after) or _AT_MOST_AFTER_RE.search(text_after):
+        elif _AT_MOST_RE.search(text_before) or _AT_MOST_BEFORE_RE.search(text_before) or _AFTER_CEILING_RE.search(hint_after) or _AT_MOST_AFTER_RE.search(text_after):
             lo, hi = 0, num1  # an explicit ceiling gets no tolerance above it
-        elif "+" in match.group(0) or _AT_LEAST_RE.search(text_before) or _AT_LEAST_BEFORE_RE.search(text_before) or _AFTER_FLOOR_RE.search(text_after) or _AT_LEAST_AFTER_RE.search(text_after):
+        elif "+" in match.group(0) or _AT_LEAST_RE.search(text_before) or _AT_LEAST_BEFORE_RE.search(text_before) or _AFTER_FLOOR_RE.search(hint_after) or _AT_LEAST_AFTER_RE.search(text_after):
             lo, hi = int(num1 * (1 - tol)), None
         else:
             lo, hi = int(num1 * (1 - tol)), math.ceil(num1 * (1 + tol))  # exact target
+            plain += 1
         # A limit stated after the count without a unit: "1000 words (max 1200)", "1000 words max, 800 min".
         floor, ceiling = _after_limits(text_after)
         if ceiling is not None:
@@ -171,7 +173,7 @@ def _length_target(length):
         if new_high is not None and new_low > new_high:
             continue  # contradicts an earlier count: the earlier one stands
         found, low, high = True, new_low, new_high
-    if not found:
+    if not found or plain > 1:  # several unqualified counts ("intro 100 words, body 400 words") are no total
         return None
     return unit, low, high
 

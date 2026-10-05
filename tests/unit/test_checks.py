@@ -390,3 +390,24 @@ def test_host_citation_needs_word_edges_and_short_titles_are_not_enough():
     ux = {"sources": [{"title": "Home", "url": "https://ux.com/x"}]}
     assert not check({}, "see linux.com; Home is where the heart is", ux)["citations_present"].passed
     assert check({}, "see docs.ux.com for details", ux)["citations_present"].passed
+
+
+@pytest.mark.parametrize(
+    "length, words, passed",
+    [
+        ("at least 300 words, at most 500 words", 400, True),
+        ("at least 300 words, at most 500 words", 600, False),
+        ("at least 300 words, up to 500 words", 200, False),
+        ("<500 words", 300, True),
+        ("<500 words", 600, False),
+        (">500 words", 700, True),
+        (">500 words", 300, False),
+        ("max. 500 words", 450, True),
+        ("max. 500 words", 600, False),
+        ("min. 500 words", 800, True),
+        ("min. 500 words", 300, False),
+        ("Intro 100 words, body 400 words, conclusion 100 words", 600, True),
+    ],
+)
+def test_comma_limits_symbols_abbreviations_and_per_section_lists(length, words, passed):
+    assert check({"length": length}, "w " * words)["length"].passed is passed
