@@ -29,8 +29,10 @@ Things to know when running it:
   query and, with `fetch_url`, chooses the URLs to fetch, so anything in a prompt can end up in a
   query or steer a request to an attacker-controlled public host. The harness fetches only public
   http(s) hosts: private, loopback, link-local and cloud-metadata addresses are refused, whether
-  given directly, returned by DNS or reached through a redirect, so such a request cannot reach
-  internal services. Fetched content is untrusted: it is truncated and wrapped in marker tags, and
+  given directly, returned by DNS or reached through a redirect. The host is resolved once to check
+  it and again when the connection opens, so a hostile DNS server that changes its answer between
+  the two lookups (DNS rebinding) is not stopped; run the harness without access to internal
+  services if that matters to you. Fetched content is untrusted: it is truncated and wrapped in marker tags, and
   the agent is told never to follow instructions inside it. Do not put secrets in requests, and
   treat generated content as untrusted.
 

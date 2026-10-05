@@ -29,9 +29,21 @@ def test_placeholder_blocks_even_when_llm_scores_high():
 
 
 def test_non_critical_failure_adds_issue_but_does_not_block():
-    out = checks.finalize_review(REVIEW, results_for("# T\n\nshort", brief={"length": "500 words"}), 80)
+    out = checks.finalize_review(REVIEW, results_for("# T\n\nfine", brief={"key_points": ["quantum computing"]}), 80)
     assert out["status"] == "approved"
-    assert any(i["category"] == "deterministic:length" for i in out["issues"])
+    assert any(i["category"] == "deterministic:key_points_covered" for i in out["issues"])
+
+
+def test_length_violation_blocks_even_with_a_high_score():
+    out = checks.finalize_review(REVIEW, results_for("# T\n\nshort", brief={"length": "500 words"}), 80)
+    assert out["status"] == "revision_required"
+    assert any(i["category"] == "deterministic:length" and i["severity"] == "critical" for i in out["issues"])
+
+
+def test_low_score_without_issues_gets_a_synthesized_issue():
+    out = checks.finalize_review(dict(REVIEW, score=72, issues=[]), results_for("# T\n\nfine"), 80)
+    assert out["status"] == "revision_required"
+    assert [i["category"] for i in out["issues"]] == ["score_below_threshold"]
 
 
 def test_low_score_blocks():

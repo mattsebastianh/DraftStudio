@@ -24,3 +24,8 @@ def test_no_json_raises():
 def test_unbalanced_raises():
     with pytest.raises(ValueError):
         extract_json('{"a": 1')
+
+
+def test_extract_json_ignores_braces_inside_strings():
+    assert extract_json('Here: {"draft": {"content": "use } and { here"}} done') == {"draft": {"content": "use } and { here"}}
+    assert extract_json('{"a": "quote \\" } still inside"}') == {"a": 'quote " } still inside'}

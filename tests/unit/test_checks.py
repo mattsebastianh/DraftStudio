@@ -34,7 +34,7 @@ def test_length_range_with_tolerance():
 
 def test_length_single_number_and_severity():
     r = check({"length": "about 500 words"}, "w " * 200)["length"]
-    assert not r.passed and r.severity == "medium" and "200" in r.detail
+    assert not r.passed and r.severity == "critical" and "200" in r.detail
 
 
 def test_length_accepts_integer():
@@ -308,3 +308,34 @@ def test_positive_floors_and_exact_bands_are_unchanged():
     assert _passes("no fewer than 500 words", 900) and not _passes("no fewer than 500 words", 300)
     assert _passes("over email, exactly 500 words", 425) and _passes("over email, exactly 500 words", 575)
     assert not _passes("over email, exactly 500 words", 424) and not _passes("over email, exactly 500 words", 576)
+
+
+@pytest.mark.parametrize(
+    "length, words, passed",
+    [
+        ("Write at least 300 words and under 600 words", 500, True),
+        ("Write at least 300 words and under 600 words", 700, False),
+        ("Write at least 300 words and under 600 words", 200, False),
+        ("about 500 words, max 3 sections", 50, False),
+        ("about 500 words, max 3 sections", 500, True),
+        ("1000 words (max 1200)", 1190, True),
+        ("1000 words (max 1200)", 1250, False),
+        ("500 words max", 520, False),
+        ("Keep it under 5 sections. Use 300 words", 310, True),
+        ("Max 2 paragraphs, 150 words", 160, False),
+    ],
+)
+def test_length_hints_bind_to_their_own_count(length, words, passed):
+    assert check({"length": length}, "w " * words)["length"].passed is passed
+
+
+def test_short_acronym_key_points_are_enforced():
+    brief = {"key_points": ["AI use", "ROI"]}
+    assert not check(brief, "nothing relevant here")["key_points_covered"].passed
+    assert check(brief, "Our AI use grows and ROI follows")["key_points_covered"].passed
+
+
+def test_short_source_title_needs_word_edges():
+    dossier = {"sources": [{"title": "AI", "url": "https://example.org/x"}]}
+    assert not check({}, "He said homework is due, and the maid waited", dossier)["citations_present"].passed
+    assert check({}, "As reported by AI, costs fell", dossier)["citations_present"].passed

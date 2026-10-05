@@ -15,7 +15,7 @@ PLACEHOLDER_RE = re.compile(
 _UNIT_SPAN_RE = re.compile(r"(\d+(?:[,.]\d+)*k?)\s*(?:(?:-|–|—|to)\s*(\d+(?:[,.]\d+)*k?)\s*)?(words?|characters?|chars?)\b", re.IGNORECASE)
 _NUMBER = r"\d+(?:[,.]\d+)*k?"
 _BETWEEN_RE = re.compile(rf"\bbetween\s+({_NUMBER})\s+and\s+({_NUMBER})\s*(words?|characters?|chars?)\b", re.IGNORECASE)
-# Hints that bind anywhere in the text before the count ("Max 2 paragraphs, 150 words"), or right after it.
+# Hints that bind anywhere in the count's sentence before it ("Max 2 paragraphs, 150 words"), or right after it.
 _AT_MOST_RE = re.compile(
     r"≤|<=|\bmax(?:imum)?\b|\bup to\b|\bno (?:more|longer) than\b|\bnot (?:more than|to exceed|exceed(?:ing)?|over|above)\b|(?:\b(?:never|do not|must not|cannot|can not)|n't|can’t) exceed\b|(?:\bnot|\bcannot|n't|’t) be (?:more than|over|above|greater than|longer than)\b|(?:\bnot(?: to)?|n't|’t) go (?:over|above|beyond)\b|\bwithout exceeding\b|\bnot longer than\b|\bat most\b|\bunder\b",
     re.IGNORECASE,
@@ -32,6 +32,14 @@ _PER_ITEM_BEFORE_RE = re.compile(
     r"(?:\b(?:each|every)\b[^,;.]{0,20}|\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+[a-z]+s\s+(?:of|at)\s+(?:[a-z~]+\s+){0,2})$",
     re.IGNORECASE,
 )
+# After the count: "500 words max", "1000 words (max 1200)"; "max 3 sections" belongs to another count.
+_AFTER_CEILING_RE = re.compile(r"^[\s(,–-]*(?:max(?:imum)?|at most|tops|up to|no more than)\b(?!\s*\d)", re.IGNORECASE)
+_AFTER_FLOOR_RE = re.compile(r"^[\s(,–-]*(?:min(?:imum)?|at least)\b(?!\s*\d)", re.IGNORECASE)
+_AFTER_CEILING_NUM_RE = re.compile(
+    rf"^[\s(,–-]*(?:max(?:imum)?|at most|up to|no more than)\s*(?:of\s*)?({_NUMBER})\s*(?:words?|characters?|chars?)?\s*(?:[).,;]|$)",
+    re.IGNORECASE,
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;])\s+|\n")
 MAX_PLAUSIBLE_COUNT = 10**12
 
 
@@ -88,38 +96,52 @@ def _length_target(length):
             return None
         return "words", int(length * (1 - config.LENGTH_TOLERANCE)), math.ceil(length * (1 + config.LENGTH_TOLERANCE))
 
-    # Find a unit-bound count: "between X and Y <unit>", or (number) [number] (unit).
+    # Find unit-bound counts: "between X and Y <unit>", or (number) [number] (unit).
     text = str(length)
     between = _BETWEEN_RE.search(text)
-    match = between or _UNIT_SPAN_RE.search(text)
-    if not match:
+    matches = [between] if between else list(_UNIT_SPAN_RE.finditer(text))
+    if not matches:
         return None
-    text_before = text[: match.start()]
-    text_after = text[match.end() :]
-    if _PER_ITEM_AFTER_RE.search(text_after[:16]) or _PER_ITEM_BEFORE_RE.search(text_before):
-        return None
-
-    unit_str = match.group(3).lower()
-    unit = "characters" if unit_str[0] == "c" else "words"
-
-    try:
-        num1 = _parse_number(match.group(1))
-        num2 = _parse_number(match.group(2)) if match.group(2) else None
-    except (ValueError, OverflowError):
-        return None
-
+    unit = "characters" if matches[0].group(3)[0].lower() == "c" else "words"
     tol = config.LENGTH_TOLERANCE
-    if num2 is not None:
-        low, high = sorted([num1, num2])
-        return unit, int(low * (1 - tol)), math.ceil(high * (1 + tol))
-    # Single number: hints before the match or just after it.
-    near_after = text_after[:12]
-    search_text = text_before + " " + near_after
-    if _AT_MOST_RE.search(search_text) or _AT_MOST_BEFORE_RE.search(text_before) or _AT_MOST_AFTER_RE.search(near_after):
-        return unit, 0, num1  # an explicit ceiling gets no tolerance above it
-    if _AT_LEAST_RE.search(search_text) or _AT_LEAST_BEFORE_RE.search(text_before) or _AT_LEAST_AFTER_RE.search(near_after):
-        return unit, int(num1 * (1 - tol)), None
-    return unit, int(num1 * (1 - tol)), math.ceil(num1 * (1 + tol))  # exact target
+    low, high, found = 0, None, False
+    for index, match in enumerate(matches):
+        if ("characters" if match.group(3)[0].lower() == "c" else "words") != unit:
+            continue
+        # Each count reads only the text between its neighbouring counts, cut to its own sentence.
+        before_start = matches[index - 1].end() if index else 0
+        after_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        text_before = _SENTENCE_SPLIT_RE.split(text[before_start : match.start()])[-1]
+        text_after = _SENTENCE_SPLIT_RE.split(text[match.end() : after_end])[0]
+        if _PER_ITEM_AFTER_RE.search(text_after[:16]) or _PER_ITEM_BEFORE_RE.search(text_before):
+            continue
+        try:
+            num1 = _parse_number(match.group(1))
+            num2 = _parse_number(match.group(2)) if match.group(2) else None
+        except (ValueError, OverflowError):
+            continue
+        if num2 is not None:
+            lo, hi = sorted([num1, num2])
+            lo, hi = int(lo * (1 - tol)), math.ceil(hi * (1 + tol))
+        elif _AT_MOST_RE.search(text_before) or _AT_MOST_BEFORE_RE.search(text_before) or _AFTER_CEILING_RE.search(text_after) or _AT_MOST_AFTER_RE.search(text_after):
+            lo, hi = 0, num1  # an explicit ceiling gets no tolerance above it
+        elif _AT_LEAST_RE.search(text_before) or _AT_LEAST_BEFORE_RE.search(text_before) or _AFTER_FLOOR_RE.search(text_after) or _AT_LEAST_AFTER_RE.search(text_after):
+            lo, hi = int(num1 * (1 - tol)), None
+        else:
+            lo, hi = int(num1 * (1 - tol)), math.ceil(num1 * (1 + tol))  # exact target
+            ceiling = _AFTER_CEILING_NUM_RE.search(text_after)  # "1000 words (max 1200)"
+            if ceiling:
+                try:
+                    hi = max(hi, _parse_number(ceiling.group(1)))
+                except (ValueError, OverflowError):
+                    pass
+        found = True
+        low = max(low, lo)
+        if hi is not None:
+            high = hi if high is None else min(high, hi)
+    if not found or (high is not None and low > high):
+        return None
+    return unit, low, high
 
 
 def check_length(brief, content):
@@ -134,7 +156,7 @@ def check_length(brief, content):
     return CheckResult(
         "length",
         False,
-        "medium",
+        "critical",  # a stated length is a hard constraint, so it blocks approval
         f"Draft is {size} {unit}; the brief allows {allowed} {unit}.",
         f"Rewrite to {allowed} {unit}.",
     )
@@ -153,7 +175,12 @@ def check_key_points(brief, content):
     missing = []
     for point in points:
         stems = _stems(str(point))
-        if stems and sum(s in haystack for s in stems) / len(stems) < 0.5:
+        if stems:
+            covered = sum(s in haystack for s in stems) / len(stems) >= 0.5
+        else:  # only short words ("AI", "ROI", "SEO"): the phrase itself must appear
+            phrase = str(point).strip()
+            covered = not phrase or re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", content, re.IGNORECASE) is not None
+        if not covered:
             missing.append(str(point))
     if not missing:
         return _passed("key_points_covered")
@@ -220,19 +247,20 @@ def check_citations(content, dossier):
     if not sources:
         return _passed("citations_present", "no research sources to cite")
     lowered = content.lower()
-    squashed = _normalized(content)
     for src in sources:
-        # Guard: skip non-dict entries; treat None url/title as empty.
         if not isinstance(src, dict):
             continue
-        url = (src.get("url") or "") if src.get("url") is not None else ""
+        url = src.get("url") or ""
         host = (urlparse(url).hostname or "").lower().removeprefix("www.") if url else ""
-        title = (src.get("title") or "") if src.get("title") is not None else ""
-        if (url and url.lower() in lowered) or (host and host in lowered) or (title and title.lower() in lowered):
+        title = src.get("title") or ""
+        if (url and url.lower() in lowered) or (host and host in lowered):
+            return _passed("citations_present")
+        # A multi-word title counts when quoted as written; any title counts as a name on word edges.
+        if " " in title.strip() and re.search(rf"(?<!\w){re.escape(title.strip().lower())}(?!\w)", lowered):
             return _passed("citations_present")
         label = _normalized(_host_label(host))
         name = _normalized(title)
-        if (len(label) >= 4 and _label_cited(label, content)) or (name and name in squashed):
+        if (len(label) >= 4 and _label_cited(label, content)) or (name and _label_cited(name, content)):
             return _passed("citations_present")
     return CheckResult(
         "citations_present",
@@ -287,6 +315,15 @@ def finalize_review(llm_review, results, threshold):
                 "category": "malformed_review",
                 "description": "ReviewAgent returned a missing or non-numeric score.",
                 "suggested_fix": "Re-run the review and return a numeric 0-100 score.",
+            }
+        )
+    if score < threshold and not issues:
+        issues.append(
+            {
+                "severity": "high",
+                "category": "score_below_threshold",
+                "description": f"ReviewAgent scored the draft {score}, below the {threshold} threshold, but listed no issues.",
+                "suggested_fix": "Strengthen the draft against the brief: accuracy, completeness, tone and structure.",
             }
         )
     status = "approved" if score >= threshold and not any(_is_critical(i) for i in issues) else "revision_required"

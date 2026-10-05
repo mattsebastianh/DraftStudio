@@ -37,9 +37,18 @@ def extract_json(text):
     start = text.find("{")
     if start == -1:
         raise ValueError("no JSON object in model reply")
-    depth = 0
+    depth, in_string, escaped = 0, False, False
     for i, ch in enumerate(text[start:], start):
-        if ch == "{":
+        if in_string:  # braces inside a JSON string do not count
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
             depth += 1
         elif ch == "}":
             depth -= 1

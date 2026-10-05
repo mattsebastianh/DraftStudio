@@ -220,6 +220,14 @@ def test_both_groq_models_out_of_daily_quota_switch_to_openrouter():
     assert [p["model"] for p in post.payloads] == ["primary/model", "fallback/model", "or/model"]
 
 
+def test_request_specific_rejection_does_not_switch_provider():
+    post = FakePost(LLMHTTPError(400, "messages: invalid role"), body('{"score": 1}'))
+    client = make_client(post, OPENROUTER_ENV)
+    with pytest.raises(LLMHTTPError):
+        client.chat_structured(MSGS, SCHEMA, "R", 1000)
+    assert post.urls == ["https://groq.test/v1"] and client.fallback_provider_used is None
+
+
 def test_without_a_real_openrouter_key_the_groq_error_propagates():
     env = {**OPENROUTER_ENV, "OPENROUTER_API_KEY": "your-openrouter-api-key-here"}
     post = FakePost(LLMHTTPError(403, DENIED))

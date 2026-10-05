@@ -206,6 +206,9 @@ class LLMClient:
                 body, model = self._complete_on(provider, messages, max_tokens, response_format, tools, reasoning_effort)
                 break
             except LLMHTTPError as err:
+                # A request the provider rejected as malformed would fail anywhere: no switch.
+                if err.code in (400, 422) and "tool_use_failed" not in err.detail.lower():
+                    raise
                 if self._current + 1 == len(self.providers):
                     raise
                 self._current += 1
