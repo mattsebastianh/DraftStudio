@@ -1,7 +1,8 @@
 wire:
   id: DraftAgent_to_ReviewAgent
-  version: "1.0"
+  version: "1.2"
   created: 2026-04-13
+  updated: 2026-10-04
 
 sender:
   agent: DraftAgent
@@ -14,6 +15,7 @@ receiver:
 
 message_schema:
   type: object
+  additionalProperties: false
   required:
     - draft
     - brief
@@ -59,6 +61,31 @@ message_schema:
       type: integer
       description: "Current revision cycle (0 = first review)"
       example: 0
+    dossier:
+      type: object
+      description: "Research dossier (ResearchAgent_to_DraftAgent shape), present only when research ran; lets ReviewAgent verify claims and citations"
+    deterministic_checks:
+      type: array
+      description: "Rule-based check results computed by the harness before review (length, key points, placeholders, citations, format)"
+      items:
+        type: object
+        required:
+          - id
+          - passed
+          - severity
+        properties:
+          id:
+            type: string
+            example: "no_placeholders"
+          passed:
+            type: boolean
+          severity:
+            type: string
+            enum: ["critical", "high", "medium", "low"]
+          detail:
+            type: string
+          suggested_fix:
+            type: string
 
 failure_handling:
   on_timeout:
@@ -75,3 +102,6 @@ failure_handling:
 metadata:
   description: "Submits a completed draft from DraftAgent to ReviewAgent for quality gate evaluation"
   data_sensitivity: internal
+  changelog:
+    - "1.1 (2026-10-03): added deterministic_checks (computed by the harness); top-level fields closed"
+    - "1.2 (2026-10-04): added optional dossier so ReviewAgent can verify claims and citations against the research"

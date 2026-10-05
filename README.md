@@ -45,6 +45,7 @@ The agents communicate over 9 verified **wires** — explicit contracts in `wire
 
 ### Prerequisites
 
+- Python 3.10 or newer
 - [claude-code](https://claude.com/claude-code) CLI
 - A [Groq API key](https://console.groq.com/keys) (free tier works)
 - Recommended: an [OpenRouter API key](https://openrouter.ai/keys) as a second provider. Groq can be unreachable from some regions or VPN exit IPs, and the pipeline then fails over to OpenRouter
@@ -56,19 +57,22 @@ git clone https://github.com/mattsebastianh/DraftStudio.git
 cd DraftStudio
 cp .env.example .env
 # edit .env and paste in your real GROQ_API_KEY
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
 ```
 
 `.env` is gitignored — real keys never leave your machine. The models are configured there too:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `GROQ_PRIMARY_MODEL` | `llama-3.3-70b-versatile` | Default model for all agent calls |
-| `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-120b` | Used automatically when the primary model's daily token quota (TPD) is exhausted |
+| `GROQ_PRIMARY_MODEL` | `openai/gpt-oss-120b` | Default model for all agent calls |
+| `GROQ_FALLBACK_MODEL` | `qwen/qwen3.8-27b` | Used automatically when the primary model's daily token quota (TPD) is exhausted |
 | `OPENROUTER_API_KEY` | (none) | Enables the second provider; without it a Groq outage stops the harness |
 | `OPENROUTER_PRIMARY_MODEL` | none; e.g. `openai/gpt-oss-120b` (required for the fallback) | Model the harness uses on OpenRouter after Groq fails |
+| `TAVILY_API_KEY` | (none) | [Tavily](https://app.tavily.com) key for ResearchAgent's web search; without it research fails soft (no findings, gaps say why) |
 | `N8N_WEBHOOK_API_KEY` | (none) | `X-API-Key` secret for the n8n webhook (n8n holds its own copy) |
 
-Swap models by editing `.env` — nothing else references model IDs. Note the fallback is a reasoning model: give it a generous `max_tokens` budget, since reasoning tokens count against it.
+Swap models by editing `.env` — nothing else references model IDs. Per-agent token budgets and reasoning effort live in `harness/config.py`; they leave headroom because reasoning models (the gpt-oss family) spend completion tokens on reasoning.
 
 ### Verify your connection
 
@@ -98,15 +102,21 @@ Open claude-code in the repo root. The studio is operated through five slash com
 `harness/run_pipeline.py` executes the full agent pipeline against the Groq API with real model calls:
 
 ```bash
-python3 harness/run_pipeline.py "<raw client request>"
+.venv/bin/python harness/run_pipeline.py "<raw client request>"
 ```
 
-It routes the request through IntakeAgent → (ResearchAgent) → DraftAgent → ReviewAgent → DispatchAgent, including the revision loop (max 3 cycles, approval at ≥ 80/100) and human escalation. Each run writes:
+It routes the request through IntakeAgent → (ResearchAgent) → DraftAgent → ReviewAgent → DispatchAgent, including the revision loop (max 3 cycles) and human escalation. Along the way:
 
-- a full I/O log to `tests/live_runs/run_<timestamp>.json` (per-step model, tokens, timing)
-- the approved deliverable to `deliverables/<slug>.md`
+- every hop message is validated against its wire contract in `wires/`, and every reply against the agent's `agents/<Agent>/output_schema.json` (schema-enforced output where the model supports it, JSON mode plus validation otherwise; invalid replies are retried with the errors fed back)
+- ResearchAgent searches the web (Tavily) and fetches pages; a finding survives only if it cites a URL the tools actually returned, and without a search key research fails soft
+- ReviewAgent's rubric is combined with deterministic checks (length, key points, placeholder text, citations, format), and the approval decision is computed in code: score ≥ 80 and no critical issue
 
-The harness retries transient errors (TPM 429s, 5xx, malformed JSON replies), falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out, and switches to OpenRouter (`OPENROUTER_PRIMARY_MODEL`) for the rest of the run if Groq is unreachable or refuses the request (for example a regional block). Set `OPENROUTER_API_KEY` in `.env` to enable that second provider. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically (see `CLAUDE.md`) — no manual invocation needed.
+Each run writes:
+
+- a full I/O log to `tests/live_runs/run_<timestamp>.json` (per-step provider, model, tokens, timing, validation retries and check results), also when a step fails
+- the approved deliverable to `deliverables/<slug>.md` (never overwriting an existing file)
+
+The harness retries transient errors (TPM 429s, 5xx), falls back to `GROQ_FALLBACK_MODEL` automatically if the primary model's daily token quota runs out, and switches to OpenRouter (`OPENROUTER_PRIMARY_MODEL`) for the rest of the run if Groq is unreachable or refuses the request (for example a regional block). Set `OPENROUTER_API_KEY` in `.env` to enable that second provider. In claude-code, any request for a new draft, revision, or review is routed through this harness automatically by the project's claude-code instructions — no manual invocation needed.
 
 ### The n8n workflow
 
@@ -123,11 +133,10 @@ agents/          ← One subdirectory per agent (agent.md, system_prompt.txt, to
   registry.yaml  ← Central registry: status, paths, and wires for every agent
 wires/           ← Inter-agent communication contracts (YAML)
 specs/           ← Agent specs, written before scaffolding
-harness/         ← Live execution harness (run_pipeline.py)
+harness/         ← Live execution harness (run_pipeline.py and its modules)
 n8n/             ← Importable n8n workflow (JSON) and node verification notes
 scripts/         ← Tooling, e.g. the n8n workflow validator
 tests/           ← Unit tests and pipeline test results
-deliverables/    ← Outputs produced by the pipeline
 assets/          ← Images used by this README (header, architecture diagrams, n8n canvas)
 
 Local only (gitignored, kept as empty folders):
@@ -135,21 +144,22 @@ docs/            ← Handbook, n8n design doc, plans
 reviews/         ← Audit reports from /agent-review
 handoffs/        ← Session export dumps from /context-dump
 tests/live_runs/ ← Run logs written by the harness
+deliverables/    ← Approved deliverables written by the harness
 ```
 
-Every agent defines: Role, Goal, Backstory, Tools, Constraints, and Escalation rules. Tool definitions are JSON; system prompts are plain text and kept under 500 tokens.
+Every agent defines: Role, Goal, Backstory, Tools, Constraints, and Escalation rules. Tool definitions and output schemas are JSON; system prompts are plain text and kept under 500 tokens.
 
 ## Status
 
 All 5 agents are built, reviewed, pipeline-tested, and **active**. The full wire map (9 wires) passed static integration testing — see `tests/pipeline_test_results.md`.
 
-**Live execution is verified.** Eight live end-to-end runs against the Groq API have completed (scores 85–94/100), including real client-style draft requests delivered through the full pipeline. The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. One known gap: the ReviewAgent → DraftAgent revision loop and 3-cycle escalation have never fired live — every run so far has been approved on round 0 (run logs are kept locally in `tests/live_runs/`).
+**Live execution is verified.** Live end-to-end runs against the Groq and OpenRouter APIs have completed with real client-style requests (scores 72–94/100). The automatic primary→fallback model switch on daily-quota exhaustion is tested and working. After the 2026-10 harness modernization (schema-validated hops, real web research, code-computed review verdict), the ReviewAgent → DraftAgent revision loop and the 3-cycle human escalation have both fired live: most requests were approved after one revision, and a strict-citation brief exhausted its three cycles and escalated with no deliverable (run logs are kept locally in `tests/live_runs/`).
 
 **n8n workflow:** imported into a local n8n 2.x and run live (Telegram in and out, the revision loop, a Groq 429 with model fallback). Unlike the harness, the revision loop has fired live there. Webhook authentication is verified live (no key and a wrong key get 403, the right key runs the pipeline), and a full run with the stricter gate escalated correctly. The Groq reviewer fallback and the failure branches are built and unit-tested but not yet run live; see the status table in the design doc.
 
-**Provider fallback:** the harness switches to OpenRouter when Groq fails (checked live by forcing an invalid Groq key) and the n8n workflow gives every agent two providers. The unit tests (`python3 -m unittest discover -s tests/unit`) cover the wiring and the harness fallback.
+**Provider fallback:** the harness switches to OpenRouter when Groq fails (checked live by forcing an invalid Groq key) and the n8n workflow gives every agent two providers. The unit tests (`.venv/bin/pytest`) cover the wiring, the wire contracts, the harness fallbacks and the review checks.
 
-Planned v2 work: priority handling at intake, `client_id` propagation, multi-channel delivery, and a trap brief that forces a sub-80 round-0 score to finally exercise the revision loop live.
+Planned work: priority handling at intake, `client_id` propagation, multi-channel delivery, structured word-count limits from IntakeAgent, and a second web-search provider behind the same tool interface.
 
 ## Design Principles
 

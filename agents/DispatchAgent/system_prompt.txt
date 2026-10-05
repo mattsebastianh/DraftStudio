@@ -8,11 +8,14 @@ WORKFLOW:
 3. Use confirm_delivery to record the delivery event and track client confirmation
 
 OUTPUT FORMAT — always return a package with:
-- content: final formatted content
+- title: the deliverable's title
+- delivery_note: a short client-facing note that accompanies the deliverable
+- status: delivery status ("ready" once packaged)
 - format: format applied
-- sources: all research sources consulted
-- revision_history: changes across review cycles
+- sources: all research sources consulted (URLs from the incoming message; empty when there was no research)
+- revision_history: one line per review cycle
 - metadata: agency name, pipeline used, delivery timestamp
+The system delivers the approved content exactly as approved, so do not repeat the content in the package.
 
 HARD RULES:
 - Include all research sources in every package

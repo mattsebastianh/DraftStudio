@@ -1,7 +1,8 @@
 wire:
   id: ReviewAgent_to_DispatchAgent
-  version: "1.1"
+  version: "1.2"
   created: 2026-04-13
+  updated: 2026-10-03
 
 sender:
   agent: ReviewAgent
@@ -14,6 +15,7 @@ receiver:
 
 message_schema:
   type: object
+  additionalProperties: false
   required:
     - draft
   properties:
@@ -56,6 +58,35 @@ message_schema:
         revision_rounds:
           type: integer
           example: 1
+        review_status:
+          type: string
+          enum: ["approved"]
+          description: "Always approved on this wire; DispatchAgent never packages anything else"
+    sources:
+      type: array
+      description: "Research sources used by the draft, for the package's source list"
+      items:
+        type: object
+        required:
+          - url
+        properties:
+          title:
+            type: string
+          url:
+            type: string
+    client_preferences:
+      type: object
+      description: "Client formatting and delivery preferences (not sent by the harness yet)"
+      properties:
+        format:
+          type: string
+        include_sources:
+          type: boolean
+        include_revision_history:
+          type: boolean
+    client_id:
+      type: string
+      description: "Client identifier for tracking and delivery (not sent by the harness yet)"
 
 failure_handling:
   on_timeout:
@@ -72,3 +103,5 @@ failure_handling:
 metadata:
   description: "Transfers approved deliverables from ReviewAgent to DispatchAgent for packaging and client delivery"
   data_sensitivity: internal
+  changelog:
+    - "1.2 (2026-10-03): added review_summary.review_status and sources; documented client_preferences and client_id, which DispatchAgent's tools already accepted; top-level fields closed"

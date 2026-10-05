@@ -15,6 +15,7 @@ agents:
     spec: specs/ResearchAgent_spec.md
     system_prompt: agents/ResearchAgent/system_prompt.txt
     tools: agents/ResearchAgent/tools.json
+    output_schema: agents/ResearchAgent/output_schema.json
     status: active
     created: 2026-04-13
     wires:
@@ -30,6 +31,7 @@ agents:
     spec: specs/DraftAgent_spec.md
     system_prompt: agents/DraftAgent/system_prompt.txt
     tools: agents/DraftAgent/tools.json
+    output_schema: agents/DraftAgent/output_schema.json
     status: active
     created: 2026-04-13
     wires:
@@ -46,6 +48,7 @@ agents:
     spec: specs/ReviewAgent_spec.md
     system_prompt: agents/ReviewAgent/system_prompt.txt
     tools: agents/ReviewAgent/tools.json
+    output_schema: agents/ReviewAgent/output_schema.json
     status: active
     created: 2026-04-13
     wires:
@@ -61,6 +64,7 @@ agents:
     spec: specs/IntakeAgent_spec.md
     system_prompt: agents/IntakeAgent/system_prompt.txt
     tools: agents/IntakeAgent/tools.json
+    output_schema: agents/IntakeAgent/output_schema.json
     status: active
     created: 2026-04-13
     wires:
@@ -75,6 +79,7 @@ agents:
     spec: specs/DispatchAgent_spec.md
     system_prompt: agents/DispatchAgent/system_prompt.txt
     tools: agents/DispatchAgent/tools.json
+    output_schema: agents/DispatchAgent/output_schema.json
     status: active
     created: 2026-04-13
     wires:

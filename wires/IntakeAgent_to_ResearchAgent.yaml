@@ -1,7 +1,8 @@
 wire:
   id: IntakeAgent_to_ResearchAgent
-  version: "1.0"
+  version: "1.1"
   created: 2026-04-13
+  updated: 2026-10-03
 
 sender:
   agent: IntakeAgent
@@ -14,6 +15,7 @@ receiver:
 
 message_schema:
   type: object
+  additionalProperties: false
   required:
     - topic
   properties:
@@ -48,3 +50,5 @@ failure_handling:
 metadata:
   description: "Routes research requests from IntakeAgent to ResearchAgent for topic investigation"
   data_sensitivity: internal
+  changelog:
+    - "1.1 (2026-10-03): top-level fields closed (additionalProperties: false) so the harness rejects undocumented fields"

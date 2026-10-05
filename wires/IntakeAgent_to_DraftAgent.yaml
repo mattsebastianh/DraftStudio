@@ -1,11 +1,12 @@
 wire:
   id: IntakeAgent_to_DraftAgent
-  version: "1.0"
+  version: "1.1"
   created: 2026-04-13
+  updated: 2026-10-03
 
 sender:
   agent: IntakeAgent
-  trigger_condition: "Request classified as draft-ready (draft_from_scratch, or draft-only with no research needed)"
+  trigger_condition: "Request classified as draft-ready; after research, the same hop also carries the research dossier"
   trigger_event: draft_routed
 
 receiver:
@@ -14,6 +15,7 @@ receiver:
 
 message_schema:
   type: object
+  additionalProperties: false
   required:
     - brief
   properties:
@@ -41,6 +43,9 @@ message_schema:
         format:
           type: string
           example: "markdown"
+    dossier:
+      type: object
+      description: "Research dossier in the ResearchAgent_to_DraftAgent shape; present only when research ran (the harness hands DraftAgent the brief and the dossier in one message)"
 
 failure_handling:
   on_timeout:
@@ -57,3 +62,5 @@ failure_handling:
 metadata:
   description: "Routes drafting briefs from IntakeAgent to DraftAgent for content creation"
   data_sensitivity: internal
+  changelog:
+    - "1.1 (2026-10-03): added optional dossier; top-level fields closed"

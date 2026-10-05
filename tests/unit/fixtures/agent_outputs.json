@@ -1,0 +1,58 @@
+{
+  "IntakeAgent": {
+    "brief": {
+      "topic": "Introduction of a new company vacation policy",
+      "audience": "All employees",
+      "tone": "Positive and reassuring, clear about expectations",
+      "length": "300-400 words",
+      "key_points": ["Unlimited PTO replaces 15-day accrual", "Manager approval still required", "Minimum 10 days per year encouraged"],
+      "format": "Internal memo in markdown"
+    },
+    "work_type": "draft_from_scratch",
+    "needs_research": false,
+    "routing_plan": ["DraftAgent", "ReviewAgent", "DispatchAgent"]
+  },
+  "ResearchAgent": {
+    "topic": "EU AI Act obligations for small SaaS companies",
+    "findings": [
+      {
+        "claim": "The EU AI Act is Regulation (EU) 2024/1689.",
+        "sources": ["https://eur-lex.europa.eu/eli/reg/2024/1689/oj"],
+        "confidence": 90,
+        "notes": "Official Journal text"
+      }
+    ],
+    "gaps": ["Enforcement dates for limited-risk transparency duties were not confirmed"],
+    "confidence": 75,
+    "sources": [{"title": "Regulation (EU) 2024/1689", "url": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj"}]
+  },
+  "DraftAgent": {
+    "draft": {
+      "title": "New Vacation Policy: Unlimited PTO",
+      "content": "# New Vacation Policy: Unlimited PTO\n\nStarting next quarter, every employee moves to unlimited paid time off.",
+      "format": "markdown",
+      "unsupported": [],
+      "word_count": 17
+    }
+  },
+  "ReviewAgent": {
+    "dimension_scores": {"clarity": 90, "accuracy": 88, "completeness": 85, "tone_alignment": 92},
+    "score": 89,
+    "requirements": [{"requirement": "Mentions manager approval", "passed": true}],
+    "issues": [
+      {"severity": "low", "category": "style", "description": "FAQ could be shorter", "suggested_fix": "Trim the FAQ to three questions"}
+    ],
+    "status": "approved"
+  },
+  "DispatchAgent": {
+    "package": {
+      "title": "New Vacation Policy: Unlimited PTO",
+      "delivery_note": "Here is the approved memo announcing the new vacation policy.",
+      "status": "ready",
+      "format": "markdown",
+      "sources": [],
+      "revision_history": ["Round 0: approved at 89/100"],
+      "metadata": {"agency": "DraftStudio", "pipeline": "Intake > Draft > Review > Dispatch"}
+    }
+  }
+}

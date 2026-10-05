@@ -98,7 +98,8 @@
           "description": "Subtopics to prioritize"
         }
       },
-      "required": ["topic"]
+      "required": ["topic"],
+      "additionalProperties": false
     }
   },
   {
@@ -119,9 +120,14 @@
             "format": { "type": "string" }
           },
           "required": ["topic"]
+        },
+        "dossier": {
+          "type": "object",
+          "description": "Research dossier (ResearchAgent_to_DraftAgent shape), present only when research ran"
         }
       },
-      "required": ["brief"]
+      "required": ["brief"],
+      "additionalProperties": false
     }
   },
   {
