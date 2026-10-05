@@ -104,26 +104,50 @@ class ConstraintCheckTests(unittest.TestCase):
 
 @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
 class VerdictTests(unittest.TestCase):
-    """Compute Verdict: approved only if score>=80 and nothing critical/high, no placeholder, length and constraints ok."""
+    """Compute Verdict + Approved?: approved only if a valid score >= 80 and no blocking issue.
 
-    def verdict(self, score=90, issues=None, placeholder=False, length_ok=True, failures=None):
-        review = {"score": score, "issues": issues or []}
+    Blocking: a critical or high ReviewAgent issue, a placeholder, a request-constraint failure, a malformed
+    review. A missed word-count target (issue #9) and a requirement the reviewer marks failed are high issues
+    that guide the reviser but do not block, as in the harness.
+    """
+
+    def verdict(self, score=90, issues=None, placeholder=False, length_ok=True, failures=None,
+                requirements=None, review=None, checks=None):
+        if review is None:
+            review = {"score": score, "issues": [] if issues is None else issues}
+            if requirements is not None:
+                review["requirements"] = requirements
+        passed = {"id": "length", "passed": True, "severity": "low", "detail": "ok", "suggested_fix": ""}
         det = {
             "has_placeholder": placeholder,
-            "length_ok": length_ok,
+            "length_check": passed if length_ok else {
+                "id": "length", "passed": False, "severity": "high",
+                "detail": "Draft is 300 words; the brief allows 425-575 words.", "suggested_fix": "Rewrite to 425-575 words."},
+            "key_points_check": dict(passed, id="key_points_covered"),
+            "citations_check": dict(passed, id="citations_present"),
+            "format_check": dict(passed, id="format"),
             "word_count": 500,
             "brief": {"length": "500 words"},
             "constraint_failures": failures or [],
         }
+        det.update(checks or {})
         nodes = {"Deterministic Checks": det}
         item = {"output": review}
-        return (
-            _evaluate(_assignment("Compute Verdict", "approved"), item, nodes),
-            _evaluate(_assignment("Compute Verdict", "issues"), item, nodes),
-        )
+        out = {f: _evaluate(_assignment("Compute Verdict", f), item, nodes) for f in ("score", "issues")}
+        gate = _nodes()["Approved?"]["parameters"]["conditions"]["conditions"][0]["leftValue"]
+        approved = _evaluate(gate, out)
+        self.assertIs(type(approved), bool)
+        for issue in out["issues"]:
+            self.assertIs(type(issue["blocking"]), bool, issue)
+        self.issues, self.score = out["issues"], out["score"]
+        return approved, out["issues"]
+
+    def categories(self):
+        return [i.get("category") for i in self.issues]
 
     def test_clean_high_score_is_approved(self):
         self.assertTrue(self.verdict()[0])
+        self.assertEqual(self.issues, [])
 
     def test_high_severity_issue_blocks_approval_execution_380(self):
         issue = {"severity": "high", "description": "wrong year", "suggested_fix": "fix"}
@@ -137,12 +161,44 @@ class VerdictTests(unittest.TestCase):
         issues = [{"severity": "medium", "description": "d", "suggested_fix": "f"},
                   {"severity": "low", "description": "d", "suggested_fix": "f"}]
         self.assertTrue(self.verdict(issues=issues)[0])
+        self.assertEqual([i["blocking"] for i in self.issues], [False, False])
 
-    def test_each_deterministic_failure_blocks(self):
+    def test_each_blocking_deterministic_failure_blocks(self):
         self.assertFalse(self.verdict(score=79)[0])
         self.assertFalse(self.verdict(placeholder=True)[0])
-        self.assertFalse(self.verdict(length_ok=False)[0])
         self.assertFalse(self.verdict(failures=["must end with X"])[0])
+
+    def test_a_length_miss_guides_the_reviser_but_does_not_block(self):
+        approved, issues = self.verdict(length_ok=False)
+        self.assertTrue(approved)
+        [length] = [i for i in issues if i["category"] == "deterministic:length"]
+        self.assertEqual(length["severity"], "high")
+        self.assertFalse(length["blocking"])
+        self.assertIn("425-575 words", length["description"])
+        self.assertEqual(length["suggested_fix"], "Rewrite to 425-575 words.")
+
+    def test_key_point_citation_and_format_misses_guide_but_do_not_block(self):
+        failed = {
+            "key_points_check": {"id": "key_points_covered", "passed": False, "severity": "medium",
+                                 "detail": "Key points not covered: parking", "suggested_fix": "Add a passage."},
+            "citations_check": {"id": "citations_present", "passed": False, "severity": "medium",
+                                "detail": "Research was used but the draft cites none of its sources.", "suggested_fix": "Cite."},
+            "format_check": {"id": "format", "passed": False, "severity": "low",
+                             "detail": "Markdown was requested but the draft has no headings.", "suggested_fix": "Add."},
+        }
+        approved, _ = self.verdict(checks=failed)
+        self.assertTrue(approved)
+        self.assertEqual(self.categories(), ["deterministic:key_points_covered", "deterministic:citations_present", "deterministic:format"])
+        self.assertEqual([i["severity"] for i in self.issues], ["medium", "medium", "low"])
+
+    def test_a_check_that_did_not_run_blocks(self):
+        approved, _ = self.verdict(checks={"citations_check": None})
+        self.assertFalse(approved)
+        self.assertEqual(self.issues[0]["severity"], "critical")
+
+    def test_a_length_miss_does_not_hide_a_real_blocker(self):
+        issue = {"severity": "critical", "description": "d", "suggested_fix": "f"}
+        self.assertFalse(self.verdict(length_ok=False, issues=[issue])[0])
 
     def test_constraint_failures_become_critical_issues_with_a_fix(self):
         approved, issues = self.verdict(failures=['The draft must end with the sentence "Bye."'])
@@ -150,6 +206,53 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(len(critical), 1)
         self.assertIn("Bye.", critical[0]["description"])
         self.assertTrue(critical[0]["suggested_fix"])
+        self.assertTrue(critical[0]["blocking"])
+
+    def test_a_failed_requirement_guides_the_reviser_but_does_not_block(self):
+        reqs = [{"requirement": "mention the parking change", "passed": False},
+                {"requirement": "friendly tone", "passed": True}]
+        approved, issues = self.verdict(requirements=reqs)
+        self.assertTrue(approved)
+        [req] = [i for i in issues if i["category"] == "requirement_failed"]
+        self.assertEqual(req["severity"], "high")
+        self.assertFalse(req["blocking"])
+        self.assertIn("mention the parking change", req["description"])
+
+    def test_scores_outside_0_to_100_fail_closed(self):
+        for bad in (120, -1, "85", None, True, float("nan")):
+            with self.subTest(score=bad):
+                approved, _ = self.verdict(score=bad)
+                self.assertFalse(approved)
+                self.assertEqual(self.score, 0)
+                self.assertIn("malformed_review", self.categories())
+
+    def test_a_missing_score_fails_closed(self):
+        self.assertFalse(self.verdict(review={"issues": []})[0])
+        self.assertIn("malformed_review", self.categories())
+
+    def test_issues_that_are_not_a_list_fail_closed(self):
+        for bad in ("all good", {"severity": "low"}, 3):
+            with self.subTest(issues=bad):
+                self.assertFalse(self.verdict(review={"score": 95, "issues": bad})[0])
+                self.assertIn("malformed_review", self.categories())
+
+    def test_missing_issues_mean_none(self):
+        self.assertTrue(self.verdict(review={"score": 95})[0])
+
+    def test_an_issue_that_is_not_an_object_fails_closed(self):
+        self.assertFalse(self.verdict(issues=["looks fine"])[0])
+        self.assertIn("malformed_review", self.categories())
+
+    def test_a_low_score_without_issues_gets_one_for_the_reviser(self):
+        approved, issues = self.verdict(score=70)
+        self.assertFalse(approved)
+        self.assertEqual(self.categories(), ["score_below_threshold"])
+        self.assertIn("70", issues[0]["description"])
+
+    def test_a_null_gate_never_approves(self):
+        gate = _nodes()["Approved?"]["parameters"]["conditions"]["conditions"][0]["leftValue"]
+        self.assertFalse(_evaluate(gate, {"score": 95, "issues": None}))
+        self.assertFalse(_evaluate(gate, {"score": 95, "issues": [{"severity": "low"}]}))  # no blocking flag
 
 
 @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
@@ -210,8 +313,18 @@ class PromptAndReplyTests(unittest.TestCase):
     def test_escalation_messages_describe_the_stricter_gate(self):
         body = self.nodes["Respond Escalated"]["parameters"]["responseBody"]
         tg = self.nodes["Telegram Reply Escalated"]["parameters"]["text"]
-        self.assertIn("high", body)
-        self.assertIn("high", tg)
+        for text in (body, tg):
+            self.assertIn("critical or high", text)
+            self.assertIn("missed word count does not block", text)
+
+    @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
+    def test_escalated_telegram_reply_lists_blocking_issues_first(self):
+        tg = self.nodes["Telegram Reply Escalated"]["parameters"]["text"]
+        issues = [{"severity": "high", "description": "length", "blocking": False}] + [
+            {"severity": "high", "description": f"blocker {n}", "blocking": True} for n in range(5)]
+        text = _evaluate(tg, {"round": 3, "score": 72, "issues": issues})
+        self.assertIn("blocker 4", text)
+        self.assertNotIn("- [high] length", text)
 
 
 @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
@@ -228,10 +341,10 @@ class ReviewFindingsTests(unittest.TestCase):
 
     def length_ok(self, brief_length, words):
         return _evaluate(
-            _assignment("Deterministic Checks", "length_ok"),
+            _assignment("Deterministic Checks", "length_check"),
             {"output": {"draft": {"content": _words(words)}}},
             {"Build Draft Input": {"brief": {"length": brief_length}}},
-        )
+        )["passed"]
 
     def placeholder(self, content):
         return _evaluate(
