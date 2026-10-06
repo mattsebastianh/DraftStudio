@@ -88,6 +88,12 @@ class ReviewerDisciplineTests(unittest.TestCase):
         self.assertNotIn("check every explicit requirement in it, not only the brief", self.text)
         self.assertIn("except what the workflow checks above already verified", self.text)
 
+    def test_the_key_point_stem_check_is_not_shown_as_a_fact(self):
+        # Execution 406: the stem check missed "illness" vs "ill" and its "failed" line primed false high issues.
+        self.assertNotIn("key_points_check", self.text)
+        self.assertNotIn("key-point coverage", self.system.split("Judge key-point coverage")[0])
+        self.assertIn("Judge key-point coverage yourself from the draft", self.system)
+
     def test_the_prompt_says_which_request_constraints_the_code_verifies(self):
         self.assertIn("closing sentence, an exact word count (within 5%) and a minimum number of bullet items", self.text)
 
