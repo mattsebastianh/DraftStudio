@@ -132,7 +132,7 @@ What to set up in n8n after importing it (credentials are referenced by name onl
 
 n8n does not read `.env`: the keys above go into n8n's credential store, and the Telegram chat-id allowlist is set on the trigger node. Research uses two tools: Wikipedia Search (an HTTP Request tool with a descriptive User-Agent, because Wikipedia answers the built-in tool with HTTP 429) and Tavily Search. The workflow's prompts are copies of `agents/*/system_prompt.txt` and its checks are ports of `harness/checks.py`; unit tests fail when either drifts (see `n8n/verify_notes.md` for node verification and live-run findings).
 
-The workflow as it looked on the n8n canvas after import (an earlier version: it predates the research verification step and the Wikipedia Search tool, see the diagram above for the current one):
+The workflow as it looks on the n8n canvas after import (the Telegram trigger is shown deactivated, as in the test copy):
 
 ![DraftStudio pipeline on the n8n canvas](assets/n8n_flow_01.png)
 
