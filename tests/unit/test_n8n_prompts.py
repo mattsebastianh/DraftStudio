@@ -68,6 +68,30 @@ class SystemMessageSyncTests(unittest.TestCase):
         self.assertNotIn("you MUST set status", msg)
 
 
+class ReviewerDisciplineTests(unittest.TestCase):
+    """Executions 402-405: ReviewAgent re-judged constraints the code had verified, wrongly, and blocked on them."""
+
+    def setUp(self):
+        node = _nodes()["ReviewAgent"]
+        self.system = _system_message(node)
+        self.text = node["parameters"]["text"]
+
+    def test_coded_check_results_are_final(self):
+        self.assertIn("These results are final", self.system)
+        for covered in ("closing sentence", "exact word count", "bullet", "placeholder"):
+            self.assertIn(covered, self.system)
+
+    def test_high_is_reserved_for_must_fix_problems(self):
+        self.assertIn("A stylistic preference, a missing nice-to-have detail or an improvement idea is medium or low", self.system)
+
+    def test_the_request_section_no_longer_asks_to_recheck_everything(self):
+        self.assertNotIn("check every explicit requirement in it, not only the brief", self.text)
+        self.assertIn("except what the workflow checks above already verified", self.text)
+
+    def test_the_prompt_says_which_request_constraints_the_code_verifies(self):
+        self.assertIn("closing sentence, an exact word count (within 5%) and a minimum number of bullet items", self.text)
+
+
 class ResearchPromptTests(unittest.TestCase):
     def setUp(self):
         self.text = _nodes()["ResearchAgent"]["parameters"]["text"]
