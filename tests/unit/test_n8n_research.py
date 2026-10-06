@@ -40,8 +40,9 @@ def tavily(*results):
 
 
 def wikipedia(*titles):
-    text = "\n\n".join(f"Page: {t}\nSummary: Some summary." for t in titles)
-    return {"action": {"tool": "wikipedia-api", "toolInput": {"input": "q"}}, "observation": text}
+    """An intermediate step as the Wikipedia Search HTTP tool returns it (MediaWiki query API, formatversion 2)."""
+    pages = [{"title": t, "fullurl": "https://en.wikipedia.org/wiki/" + t.replace(" ", "_"), "extract": "Some summary."} for t in titles]
+    return {"action": {"tool": "Wikipedia_Search", "toolInput": {"query": "q"}}, "observation": json.dumps({"query": {"pages": pages}})}
 
 
 def verify(output, steps=(), nodes=None):
@@ -73,7 +74,7 @@ class VerifyResearchTests(unittest.TestCase):
                 self.assertEqual(got["dossier"], expected)
                 self.assertEqual(got["dropped_findings"], dropped)
 
-    def test_wikipedia_pages_count_as_retrieved(self):
+    def test_wikipedia_search_results_count_as_retrieved(self):
         dossier = {"topic": "t", "confidence": 70, "gaps": [], "sources": [],
                    "findings": [{"claim": "c", "sources": ["https://en.wikipedia.org/wiki/Remote_work"], "confidence": 70}]}
         got = verify(json.dumps(dossier), [wikipedia("Remote work", "Telecommuting")])
@@ -154,6 +155,27 @@ class WiringTests(unittest.TestCase):
 
     def test_research_agent_returns_its_tool_calls(self):
         self.assertIs(self.nodes["ResearchAgent"]["parameters"]["options"]["returnIntermediateSteps"], True)
+
+    def test_wikipedia_is_an_http_request_tool_with_a_user_agent(self):
+        # The built-in Wikipedia tool is answered with HTTP 429 (Node's default User-Agent): executions 401-403.
+        self.assertNotIn("Wikipedia", self.nodes)
+        tool = self.nodes["Wikipedia Search"]
+        self.assertEqual(tool["type"], "n8n-nodes-base.httpRequestTool")
+        # The local n8n 2.20.11 has HTTP Request versions up to 4.4; 4.5 (catalog of newer n8n) fails to activate.
+        self.assertEqual(tool["typeVersion"], 4.4)
+        params = tool["parameters"]
+        self.assertEqual(params["url"], "https://en.wikipedia.org/w/api.php")
+        headers = {h["name"]: h["value"] for h in params["headerParameters"]["parameters"]}
+        self.assertTrue(headers["User-Agent"].startswith("DraftStudio"))
+        query = {q["name"]: q["value"] for q in params["queryParameters"]["parameters"]}
+        self.assertIn("$fromAI('query'", query["gsrsearch"])
+        self.assertEqual((query["action"], query["generator"], query["inprop"], query["format"]), ("query", "search", "url", "json"))
+        self.assertEqual([c["node"] for c in self.wf["connections"]["Wikipedia Search"]["ai_tool"][0]], ["ResearchAgent"])
+
+    def test_tavily_search_is_enabled(self):
+        tavily = self.nodes["Tavily Search"]
+        self.assertFalse(tavily.get("disabled", False))
+        self.assertEqual(tavily["credentials"]["httpHeaderAuth"]["name"], "DraftStudio Tavily")
 
     def test_verify_research_sits_on_the_success_output_only(self):
         out = self.wf["connections"]["ResearchAgent"]["main"]
