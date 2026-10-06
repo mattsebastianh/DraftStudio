@@ -104,45 +104,110 @@ class ConstraintCheckTests(unittest.TestCase):
 
 @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
 class VerdictTests(unittest.TestCase):
-    """Compute Verdict: approved only if score>=80 and nothing critical/high, no placeholder, length and constraints ok."""
+    """Compute Verdict + Approved?: approved only if a valid score >= 80 and no blocking issue.
 
-    def verdict(self, score=90, issues=None, placeholder=False, length_ok=True, failures=None):
-        review = {"score": score, "issues": issues or []}
+    Blocking, as in the harness: a critical ReviewAgent issue, a placeholder, a request-constraint failure, a
+    malformed review. Everything the reviewer rates high (and a missed word-count target, issue #9, and a
+    requirement it marks failed) guides the reviser but does not block. Executions 402-409: reviewer high
+    issues were often wrong and escalated good drafts, so they stopped blocking.
+    """
+
+    def verdict(self, score=90, issues=None, placeholder=False, length_ok=True, failures=None,
+                requirements=None, review=None, checks=None):
+        if review is None:
+            review = {"score": score, "issues": [] if issues is None else issues}
+            if requirements is not None:
+                review["requirements"] = requirements
+        passed = {"id": "length", "passed": True, "severity": "low", "detail": "ok", "suggested_fix": ""}
         det = {
             "has_placeholder": placeholder,
-            "length_ok": length_ok,
+            "length_check": passed if length_ok else {
+                "id": "length", "passed": False, "severity": "high",
+                "detail": "Draft is 300 words; the brief allows 425-575 words.", "suggested_fix": "Rewrite to 425-575 words."},
+            "key_points_check": dict(passed, id="key_points_covered"),
+            "citations_check": dict(passed, id="citations_present"),
+            "format_check": dict(passed, id="format"),
             "word_count": 500,
             "brief": {"length": "500 words"},
             "constraint_failures": failures or [],
         }
+        det.update(checks or {})
         nodes = {"Deterministic Checks": det}
         item = {"output": review}
-        return (
-            _evaluate(_assignment("Compute Verdict", "approved"), item, nodes),
-            _evaluate(_assignment("Compute Verdict", "issues"), item, nodes),
-        )
+        out = {f: _evaluate(_assignment("Compute Verdict", f), item, nodes) for f in ("score", "issues")}
+        gate = _nodes()["Approved?"]["parameters"]["conditions"]["conditions"][0]["leftValue"]
+        approved = _evaluate(gate, out)
+        self.assertIs(type(approved), bool)
+        for issue in out["issues"]:
+            self.assertIs(type(issue["blocking"]), bool, issue)
+        self.issues, self.score = out["issues"], out["score"]
+        return approved, out["issues"]
+
+    def categories(self):
+        return [i.get("category") for i in self.issues]
 
     def test_clean_high_score_is_approved(self):
         self.assertTrue(self.verdict()[0])
+        self.assertEqual(self.issues, [])
 
-    def test_high_severity_issue_blocks_approval_execution_380(self):
-        issue = {"severity": "high", "description": "wrong year", "suggested_fix": "fix"}
-        self.assertFalse(self.verdict(score=86, issues=[issue])[0])
+    def test_a_high_issue_guides_the_reviser_but_does_not_block(self):
+        issue = {"severity": "high", "description": "thin on tone", "suggested_fix": "fix"}
+        approved, issues = self.verdict(score=86, issues=[issue])
+        self.assertTrue(approved)
+        self.assertEqual([i["blocking"] for i in issues], [False])
+
+    def test_a_critical_issue_blocks_approval(self):
+        issue = {"severity": "critical", "description": "invented statistic", "suggested_fix": "fix"}
+        approved, issues = self.verdict(score=95, issues=[issue])
+        self.assertFalse(approved)
+        self.assertEqual([i["blocking"] for i in issues], [True])
 
     def test_severity_case_is_ignored(self):
-        issue = {"severity": "HIGH", "description": "d", "suggested_fix": "f"}
-        self.assertFalse(self.verdict(issues=[issue])[0])
+        self.assertFalse(self.verdict(issues=[{"severity": "CRITICAL", "description": "d", "suggested_fix": "f"}])[0])
+        self.assertTrue(self.verdict(issues=[{"severity": "HIGH", "description": "d", "suggested_fix": "f"}])[0])
 
     def test_medium_and_low_issues_do_not_block(self):
         issues = [{"severity": "medium", "description": "d", "suggested_fix": "f"},
                   {"severity": "low", "description": "d", "suggested_fix": "f"}]
         self.assertTrue(self.verdict(issues=issues)[0])
+        self.assertEqual([i["blocking"] for i in self.issues], [False, False])
 
-    def test_each_deterministic_failure_blocks(self):
+    def test_each_blocking_deterministic_failure_blocks(self):
         self.assertFalse(self.verdict(score=79)[0])
         self.assertFalse(self.verdict(placeholder=True)[0])
-        self.assertFalse(self.verdict(length_ok=False)[0])
         self.assertFalse(self.verdict(failures=["must end with X"])[0])
+
+    def test_a_length_miss_guides_the_reviser_but_does_not_block(self):
+        approved, issues = self.verdict(length_ok=False)
+        self.assertTrue(approved)
+        [length] = [i for i in issues if i["category"] == "deterministic:length"]
+        self.assertEqual(length["severity"], "high")
+        self.assertFalse(length["blocking"])
+        self.assertIn("425-575 words", length["description"])
+        self.assertEqual(length["suggested_fix"], "Rewrite to 425-575 words.")
+
+    def test_key_point_citation_and_format_misses_guide_but_do_not_block(self):
+        failed = {
+            "key_points_check": {"id": "key_points_covered", "passed": False, "severity": "medium",
+                                 "detail": "Key points not covered: parking", "suggested_fix": "Add a passage."},
+            "citations_check": {"id": "citations_present", "passed": False, "severity": "medium",
+                                "detail": "Research was used but the draft cites none of its sources.", "suggested_fix": "Cite."},
+            "format_check": {"id": "format", "passed": False, "severity": "low",
+                             "detail": "Markdown was requested but the draft has no headings.", "suggested_fix": "Add."},
+        }
+        approved, _ = self.verdict(checks=failed)
+        self.assertTrue(approved)
+        self.assertEqual(self.categories(), ["deterministic:key_points_covered", "deterministic:citations_present", "deterministic:format"])
+        self.assertEqual([i["severity"] for i in self.issues], ["medium", "medium", "low"])
+
+    def test_a_check_that_did_not_run_blocks(self):
+        approved, _ = self.verdict(checks={"citations_check": None})
+        self.assertFalse(approved)
+        self.assertEqual(self.issues[0]["severity"], "critical")
+
+    def test_a_length_miss_does_not_hide_a_real_blocker(self):
+        issue = {"severity": "critical", "description": "d", "suggested_fix": "f"}
+        self.assertFalse(self.verdict(length_ok=False, issues=[issue])[0])
 
     def test_constraint_failures_become_critical_issues_with_a_fix(self):
         approved, issues = self.verdict(failures=['The draft must end with the sentence "Bye."'])
@@ -150,6 +215,65 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(len(critical), 1)
         self.assertIn("Bye.", critical[0]["description"])
         self.assertTrue(critical[0]["suggested_fix"])
+        self.assertTrue(critical[0]["blocking"])
+
+    def test_a_failed_requirement_guides_the_reviser_but_does_not_block(self):
+        reqs = [{"requirement": "mention the parking change", "passed": False},
+                {"requirement": "friendly tone", "passed": True}]
+        approved, issues = self.verdict(requirements=reqs)
+        self.assertTrue(approved)
+        [req] = [i for i in issues if i["category"] == "requirement_failed"]
+        self.assertEqual(req["severity"], "high")
+        self.assertFalse(req["blocking"])
+        self.assertIn("mention the parking change", req["description"])
+
+    def test_scores_outside_0_to_100_fail_closed(self):
+        for bad in (120, -1, "85", None, True, float("nan")):
+            with self.subTest(score=bad):
+                approved, _ = self.verdict(score=bad)
+                self.assertFalse(approved)
+                self.assertEqual(self.score, 0)
+                self.assertIn("malformed_review", self.categories())
+
+    def test_a_missing_score_fails_closed(self):
+        self.assertFalse(self.verdict(review={"issues": []})[0])
+        self.assertIn("malformed_review", self.categories())
+
+    def test_issues_that_are_not_a_list_fail_closed(self):
+        for bad in ("all good", {"severity": "low"}, 3):
+            with self.subTest(issues=bad):
+                self.assertFalse(self.verdict(review={"score": 95, "issues": bad})[0])
+                self.assertIn("malformed_review", self.categories())
+
+    def test_missing_issues_mean_none(self):
+        self.assertTrue(self.verdict(review={"score": 95})[0])
+
+    def test_an_issue_that_is_not_an_object_fails_closed(self):
+        self.assertFalse(self.verdict(issues=["looks fine"])[0])
+        self.assertIn("malformed_review", self.categories())
+
+    def test_a_low_score_with_only_guiding_issues_still_tells_the_reviser_why(self):
+        issue = {"severity": "medium", "description": "dull intro", "suggested_fix": "tighten"}
+        approved, issues = self.verdict(score=72, issues=[issue])
+        self.assertFalse(approved)
+        self.assertEqual(self.categories(), [None, "score_below_threshold"])
+        self.assertTrue(issues[1]["blocking"])
+
+    def test_a_low_score_next_to_a_blocking_issue_adds_nothing(self):
+        issue = {"severity": "critical", "description": "invented statistic", "suggested_fix": "fix"}
+        self.verdict(score=72, issues=[issue])
+        self.assertEqual(self.categories(), [None])
+
+    def test_a_low_score_without_issues_gets_one_for_the_reviser(self):
+        approved, issues = self.verdict(score=70)
+        self.assertFalse(approved)
+        self.assertEqual(self.categories(), ["score_below_threshold"])
+        self.assertIn("70", issues[0]["description"])
+
+    def test_a_null_gate_never_approves(self):
+        gate = _nodes()["Approved?"]["parameters"]["conditions"]["conditions"][0]["leftValue"]
+        self.assertFalse(_evaluate(gate, {"score": 95, "issues": None}))
+        self.assertFalse(_evaluate(gate, {"score": 95, "issues": [{"severity": "low"}]}))  # no blocking flag
 
 
 @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
@@ -168,9 +292,10 @@ class ResearchFailureTests(unittest.TestCase):
         self.assertEqual(self.run_field("dossier", out), "")
         self.assertTrue(self.run_field("research_failed", out))
 
-    def test_real_dossier_passes_through(self):
-        self.assertEqual(self.run_field("dossier", "Findings: ..."), "Findings: ...")
-        self.assertFalse(self.run_field("research_failed", "Findings: ..."))
+    def test_unverified_research_is_a_failure(self):
+        # Only Verify Research's verified dossier reaches DraftAgent (tests/unit/test_n8n_research.py).
+        self.assertEqual(self.run_field("dossier", "Findings: ..."), "")
+        self.assertTrue(self.run_field("research_failed", "Findings: ..."))
 
     def test_no_research_is_not_a_failure(self):
         self.assertEqual(self.run_field("dossier", executed=False), "")
@@ -180,8 +305,9 @@ class ResearchFailureTests(unittest.TestCase):
         names = [a["name"] for a in _nodes()["Prepare Revision"]["parameters"]["assignments"]["assignments"]]
         self.assertIn("research_failed", names)
 
-    def test_research_agent_gets_more_iterations(self):
-        self.assertEqual(_nodes()["ResearchAgent"]["parameters"]["options"]["maxIterations"], 10)
+    def test_research_agent_is_capped_at_six_tool_calls_plus_the_answer(self):
+        # The prompt allows at most 6 tool calls; one iteration is one call, plus one for the final answer.
+        self.assertEqual(_nodes()["ResearchAgent"]["parameters"]["options"]["maxIterations"], 7)
 
 
 class PromptAndReplyTests(unittest.TestCase):
@@ -196,7 +322,8 @@ class PromptAndReplyTests(unittest.TestCase):
 
     def test_review_prompt_matches_the_new_gate(self):
         text = self.nodes["ReviewAgent"]["parameters"]["text"]
-        self.assertIn("critical or high", text)
+        self.assertIn("no issue is critical", text)
+        self.assertNotIn("critical or high", text)
         self.assertIn("constraint_failures", text)
         self.assertNotIn("non-critical issues do not block approval", text)
 
@@ -207,11 +334,21 @@ class PromptAndReplyTests(unittest.TestCase):
         self.assertIn("substring(0, 3900)", text)
         self.assertTrue(text.startswith("={{ ('Approved"))
 
-    def test_escalation_messages_describe_the_stricter_gate(self):
+    def test_escalation_messages_describe_the_gate(self):
         body = self.nodes["Respond Escalated"]["parameters"]["responseBody"]
         tg = self.nodes["Telegram Reply Escalated"]["parameters"]["text"]
-        self.assertIn("high", body)
-        self.assertIn("high", tg)
+        for text in (body, tg):
+            self.assertIn("no critical issue", text)
+            self.assertNotIn("critical or high", text)
+
+    @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
+    def test_escalated_telegram_reply_lists_blocking_issues_first(self):
+        tg = self.nodes["Telegram Reply Escalated"]["parameters"]["text"]
+        issues = [{"severity": "high", "description": "length", "blocking": False}] + [
+            {"severity": "high", "description": f"blocker {n}", "blocking": True} for n in range(5)]
+        text = _evaluate(tg, {"round": 3, "score": 72, "issues": issues})
+        self.assertIn("blocker 4", text)
+        self.assertNotIn("- [high] length", text)
 
 
 @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
@@ -226,12 +363,33 @@ class ReviewFindingsTests(unittest.TestCase):
             {"Build Draft Input": {"raw_request": request}},
         )
 
+    def test_exactly_n_words_each_is_not_a_whole_draft_constraint(self):
+        req = "Write three paragraphs of exactly 100 words each."
+        self.assertEqual(self.failures(_words(300), req), [])
+        self.assertEqual(self.failures(_words(300), "Write three sections, exactly 100 words per section."), [])
+        self.assertEqual(len(self.failures(_words(300), "Write exactly 100 words.")), 1)
+
+    def test_exact_word_count_message_states_the_real_window(self):
+        [msg] = self.failures(_words(60), "Write exactly 50 words.")
+        self.assertIn("allowed 45-55", msg)
+        [msg] = self.failures(_words(300), "Write exactly 250 words.")
+        self.assertIn("allowed 238-263", msg)
+        self.assertEqual(self.failures(_words(55), "Write exactly 50 words."), [])
+        self.assertEqual(len(self.failures(_words(56), "Write exactly 50 words.")), 1)
+
+    def test_a_single_quoted_closing_sentence_may_contain_an_apostrophe(self):
+        req = "End with the sentence 'Don't hesitate to reach out.'"
+        self.assertEqual(self.failures("Body.\n\nDon't hesitate to reach out.", req), [])
+        [msg] = self.failures("Body text. Don", req)
+        self.assertIn("Don't hesitate to reach out.", msg)
+        self.assertEqual(self.failures("Body.\n\nThanks!", "End with the sentence 'Thanks!'"), [])
+
     def length_ok(self, brief_length, words):
         return _evaluate(
-            _assignment("Deterministic Checks", "length_ok"),
+            _assignment("Deterministic Checks", "length_check"),
             {"output": {"draft": {"content": _words(words)}}},
             {"Build Draft Input": {"brief": {"length": brief_length}}},
-        )
+        )["passed"]
 
     def placeholder(self, content):
         return _evaluate(
@@ -328,7 +486,8 @@ class ReviewFindingsTests(unittest.TestCase):
     # -- finding 3: ReviewAgent system message must match the gate -------------------------
     def test_review_system_message_agrees_with_the_gate(self):
         msg = _nodes()["ReviewAgent"]["parameters"]["messages"]["messageValues"][0]["message"]
-        self.assertIn("critical or high", msg)
+        self.assertIn("none of your issues is critical", msg)
+        self.assertNotIn("critical or high", msg)
         self.assertNotIn("do NOT block approval", msg)
         self.assertNotIn("even if non-critical issues remain", msg)
         # output fields the Review Parser schema does not have
