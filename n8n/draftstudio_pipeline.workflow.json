@@ -4,7 +4,7 @@
     {
       "parameters": {
         "content": "## DraftStudio Pipeline (n8n)\nIntake -> Research (optional) -> Draft <-> Review -> Dispatch, built only from n8n built-in nodes.\n\n- **Trigger:** `POST /webhook/draftstudio` with body `{\"request\": \"...\"}`, or Manual Trigger + Test Input.\n- **Gate:** approved when score >= 80 and no issue blocks: a critical ReviewAgent issue, placeholder text, a failed request constraint or a malformed review (Compute Verdict, Approved?), as in the Python harness. High issues, a missed word count and requirements the reviewer marks failed are reported to the reviser but do not block.\n- **Loop:** Prepare Revision feeds DraftAgent again; at most 3 revision cycles (Rounds Left?).\n- **Responses:** `delivered` (Respond Delivered) or `escalated` (Respond Escalated, HTTP 200).\n- System prompts are copies of `agents/<Agent>/system_prompt.txt` (ReviewAgent's differs on purpose); `tests/unit/test_n8n_prompts.py` fails until a copy is refreshed.\n\nNode verification and live-run findings: `n8n/verify_notes.md`.",
-        "height": 380,
+        "height": 384,
         "width": 640,
         "color": 7
       },
@@ -14,13 +14,13 @@
       "typeVersion": 1,
       "position": [
         -40,
-        -560
+        -576
       ]
     },
     {
       "parameters": {
-        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node (the five drafting/intake/research/dispatch primaries).\n2. **OpenRouter** credential (type *OpenRouter*) named **DraftStudio OpenRouter**: paste your OpenRouter API key. Used by every `OpenRouter Fallback *` model node.\n3. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disconnect Tavily Search; ResearchAgent still has Wikipedia.\n4. **Header Auth** credential named **DraftStudio Webhook**: header name `X-API-Key`, value a long random secret. The *Webhook* node requires it, so callers must send that header. Do not switch it to *None*: anyone with the URL could run the pipeline on your Groq/Tavily quota.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
-        "height": 380,
+        "content": "## Credentials to create\n1. **Groq** credential (type *Groq API*) named **DraftStudio Groq**: paste your Groq API key. Used by every `Groq *` model node (Intake, Research, Draft and Dispatch primaries, and the review fallback).\n2. **OpenRouter** credential (type *OpenRouter*) named **DraftStudio OpenRouter**: paste your OpenRouter API key. Used by every `OpenRouter Fallback *` model node.\n3. *(Optional)* **Header Auth** credential named **DraftStudio Tavily**: header name `Authorization`, value `Bearer <your Tavily key>`. Used by *Tavily Search*. Without it, disable Tavily Search; ResearchAgent still has Wikipedia Search.\n4. **Header Auth** credential named **DraftStudio Webhook**: header name `X-API-Key`, value a long random secret. The *Webhook* node requires it, so callers must send that header. Do not switch it to *None*: anyone with the URL could run the pipeline on your Groq/Tavily quota.\n\nThe file references credentials by name with id `REPLACE_ME`; after import, pick the credential in each node.",
+        "height": 400,
         "width": 520,
         "color": 5
       },
@@ -30,13 +30,13 @@
       "typeVersion": 1,
       "position": [
         640,
-        -560
+        -576
       ]
     },
     {
       "parameters": {
         "content": "## Models\n- **Primary:** `openai/gpt-oss-120b` on every `Groq <Agent>` Chat Model node.\n- **ReviewAgent is the exception:** its primary is `qwen/qwen3-235b-a22b-2507` on OpenRouter (`OpenRouter Review`, temperature 0.1), a different model family from the drafter and off Groq's token budget; its fallback is `llama-3.3-70b-versatile` on Groq (`Groq Fallback Review`), a different provider and a third model family.\n- **Fallback:** `openai/gpt-oss-20b` on OpenRouter, on every `OpenRouter Fallback <Agent>` node, wired to the *Fallback Model* input (Enable Fallback Model = on). If the primary call fails (e.g. daily quota exhausted / 429), LangChain retries the same prompt on the fallback model.\n- Every agent has two different providers: Groq primaries fall back to OpenRouter, and the OpenRouter reviewer falls back to Groq, so a regional Groq block or an OpenRouter outage never takes out an agent (primary nodes use **DraftStudio Groq** or **DraftStudio OpenRouter**, fallbacks the other). To change a model, edit the Model field on the node; the IDs in `.env` are not read by n8n.",
-        "height": 380,
+        "height": 432,
         "width": 520,
         "color": 3
       },
@@ -46,7 +46,7 @@
       "typeVersion": 1,
       "position": [
         1200,
-        -560
+        -576
       ]
     },
     {
