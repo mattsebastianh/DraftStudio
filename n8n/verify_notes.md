@@ -1,7 +1,7 @@
 # Node verification notes
 
 Checks of `n8n/draftstudio_pipeline.workflow.json` against n8n's node definitions. For the design
-itself see [docs/n8n_workflow_design.md](../docs/n8n_workflow_design.md).
+itself (state carried between nodes, quality gate, Telegram, known limits) see the overview sticky note inside the workflow and the README; this file only covers node verification and live-run findings.
 
 | | |
 |---|---|
