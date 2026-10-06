@@ -7,6 +7,7 @@ corpus in one process and compared field by field with the harness CheckResult.
 """
 import inspect
 import json
+import os
 import shutil
 import subprocess
 import unittest
@@ -18,6 +19,16 @@ from tests.unit import test_checks
 WORKFLOW = Path(__file__).resolve().parents[2] / "n8n" / "draftstudio_pipeline.workflow.json"
 NODE = shutil.which("node")
 RECORDED = ("check_length", "check_key_points", "check_citations", "check_format", "_length_target")
+
+
+class NodeAvailableTest(unittest.TestCase):
+    """The n8n expression tests (this file, test_n8n_quality_gate, test_n8n_research) skip without `node`;
+    fail loudly instead, unless the skip is requested with DRAFTSTUDIO_SKIP_NODE_TESTS=1."""
+
+    def test_node_is_installed_for_the_n8n_expression_tests(self):
+        if os.environ.get("DRAFTSTUDIO_SKIP_NODE_TESTS") == "1":
+            self.skipTest("DRAFTSTUDIO_SKIP_NODE_TESTS=1")
+        self.assertIsNotNone(NODE, "node is required to run the n8n expression tests (or set DRAFTSTUDIO_SKIP_NODE_TESTS=1)")
 
 
 def _assignment(node_name, field):

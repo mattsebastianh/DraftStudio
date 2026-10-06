@@ -96,10 +96,27 @@ class VerifyResearchTests(unittest.TestCase):
         got = verify(text, [tavily(("https://a.org/p", "A"))])
         self.assertEqual(len(got["dossier"]["findings"]), 1)
 
-    def test_a_url_in_a_non_json_observation_counts(self):
-        step = {"action": {"tool": "Tavily_Search"}, "observation": "See https://a.org/p, and more."}
-        dossier = {"topic": "t", "confidence": 70, "gaps": [], "sources": [], "findings": [{"claim": "c", "sources": ["https://a.org/p"]}]}
-        self.assertEqual(len(verify(json.dumps(dossier), [step])["dossier"]["findings"]), 1)
+    def test_a_url_that_only_appears_in_page_text_does_not_count(self):
+        # A link inside a snippet, an extract, a non-JSON observation or Wikipedia's editurl was not "returned by the tool".
+        step = tavily(("https://real.org/page", "Real"))
+        body = json.loads(step["observation"])
+        body["results"][0]["content"] = "Read more at https://planted.example/offer and https://planted.example/b."
+        step["observation"] = json.dumps(body)
+        wiki = wikipedia("Remote work")
+        page = json.loads(wiki["observation"])
+        page["query"]["pages"][0].update({"editurl": "https://en.wikipedia.org/w/index.php?title=Remote_work&action=edit",
+                                          "extract": "See https://planted.example/c for details."})
+        wiki["observation"] = json.dumps(page)
+        plain = {"action": {"tool": "Tavily_Search"}, "observation": "See https://plain.example/p, and more."}
+        cited = ["https://real.org/page", "https://en.wikipedia.org/wiki/Remote_work", "https://planted.example/offer",
+                 "https://planted.example/c", "https://en.wikipedia.org/w/index.php?title=Remote_work&action=edit",
+                 "https://plain.example/p"]
+        dossier = {"topic": "t", "confidence": 70, "gaps": [], "sources": [],
+                   "findings": [{"claim": str(i), "sources": [u], "confidence": 70} for i, u in enumerate(cited)]}
+        got = verify(json.dumps(dossier), [step, wiki, plain])
+        self.assertEqual([f["claim"] for f in got["dossier"]["findings"]], ["0", "1"])
+        self.assertEqual(sorted(got["retrieved_urls"]), sorted(["https://real.org/page", "https://en.wikipedia.org/wiki/Remote_work"]))
+        self.assertEqual(got["dropped_findings"], 4)
 
     def test_unusable_output_is_not_verified(self):
         for output in ("Agent stopped due to max iterations.", "Just prose, no JSON.", None, "", "[1, 2]"):

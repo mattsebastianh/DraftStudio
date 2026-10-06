@@ -252,6 +252,18 @@ class VerdictTests(unittest.TestCase):
         self.assertFalse(self.verdict(issues=["looks fine"])[0])
         self.assertIn("malformed_review", self.categories())
 
+    def test_a_low_score_with_only_guiding_issues_still_tells_the_reviser_why(self):
+        issue = {"severity": "medium", "description": "dull intro", "suggested_fix": "tighten"}
+        approved, issues = self.verdict(score=72, issues=[issue])
+        self.assertFalse(approved)
+        self.assertEqual(self.categories(), [None, "score_below_threshold"])
+        self.assertTrue(issues[1]["blocking"])
+
+    def test_a_low_score_next_to_a_blocking_issue_adds_nothing(self):
+        issue = {"severity": "critical", "description": "invented statistic", "suggested_fix": "fix"}
+        self.verdict(score=72, issues=[issue])
+        self.assertEqual(self.categories(), [None])
+
     def test_a_low_score_without_issues_gets_one_for_the_reviser(self):
         approved, issues = self.verdict(score=70)
         self.assertFalse(approved)
@@ -293,8 +305,9 @@ class ResearchFailureTests(unittest.TestCase):
         names = [a["name"] for a in _nodes()["Prepare Revision"]["parameters"]["assignments"]["assignments"]]
         self.assertIn("research_failed", names)
 
-    def test_research_agent_gets_more_iterations(self):
-        self.assertEqual(_nodes()["ResearchAgent"]["parameters"]["options"]["maxIterations"], 10)
+    def test_research_agent_is_capped_at_six_tool_calls_plus_the_answer(self):
+        # The prompt allows at most 6 tool calls; one iteration is one call, plus one for the final answer.
+        self.assertEqual(_nodes()["ResearchAgent"]["parameters"]["options"]["maxIterations"], 7)
 
 
 class PromptAndReplyTests(unittest.TestCase):
@@ -349,6 +362,27 @@ class ReviewFindingsTests(unittest.TestCase):
             {"output": {"draft": {"content": content}}},
             {"Build Draft Input": {"raw_request": request}},
         )
+
+    def test_exactly_n_words_each_is_not_a_whole_draft_constraint(self):
+        req = "Write three paragraphs of exactly 100 words each."
+        self.assertEqual(self.failures(_words(300), req), [])
+        self.assertEqual(self.failures(_words(300), "Write three sections, exactly 100 words per section."), [])
+        self.assertEqual(len(self.failures(_words(300), "Write exactly 100 words.")), 1)
+
+    def test_exact_word_count_message_states_the_real_window(self):
+        [msg] = self.failures(_words(60), "Write exactly 50 words.")
+        self.assertIn("allowed 45-55", msg)
+        [msg] = self.failures(_words(300), "Write exactly 250 words.")
+        self.assertIn("allowed 238-263", msg)
+        self.assertEqual(self.failures(_words(55), "Write exactly 50 words."), [])
+        self.assertEqual(len(self.failures(_words(56), "Write exactly 50 words.")), 1)
+
+    def test_a_single_quoted_closing_sentence_may_contain_an_apostrophe(self):
+        req = "End with the sentence 'Don't hesitate to reach out.'"
+        self.assertEqual(self.failures("Body.\n\nDon't hesitate to reach out.", req), [])
+        [msg] = self.failures("Body text. Don", req)
+        self.assertIn("Don't hesitate to reach out.", msg)
+        self.assertEqual(self.failures("Body.\n\nThanks!", "End with the sentence 'Thanks!'"), [])
 
     def length_ok(self, brief_length, words):
         return _evaluate(
