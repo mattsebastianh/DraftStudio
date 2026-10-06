@@ -60,7 +60,9 @@ class SystemMessageSyncTests(unittest.TestCase):
         msg = _system_message(_nodes()["ReviewAgent"])
         for prefix in REVIEW_N8N_OVERRIDES:
             self.assertTrue(any(l.startswith(prefix) for l in msg.splitlines()), prefix)
-        self.assertIn("critical or high", msg)
+        self.assertNotIn("critical or high", msg)
+        self.assertIn("high, medium and low issues guide the revision but do not block", msg)
+        self.assertIn("Flag as critical any specific claim", msg)
         self.assertIn("Do not re-judge those rules or repeat their issues", msg)
         self.assertIn("Every failed requirement must also be listed as an issue", msg)
         # stale pre-modernization rules
@@ -80,6 +82,9 @@ class ReviewerDisciplineTests(unittest.TestCase):
         self.assertIn("These results are final", self.system)
         for covered in ("closing sentence", "exact word count", "bullet", "placeholder"):
             self.assertIn(covered, self.system)
+
+    def test_critical_is_reserved_for_problems_that_must_block_delivery(self):
+        self.assertIn("Use critical only for problems that must block delivery", self.system)
 
     def test_high_is_reserved_for_must_fix_problems(self):
         self.assertIn("A stylistic preference, a missing nice-to-have detail or an improvement idea is medium or low", self.system)

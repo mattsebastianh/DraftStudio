@@ -106,9 +106,10 @@ class ConstraintCheckTests(unittest.TestCase):
 class VerdictTests(unittest.TestCase):
     """Compute Verdict + Approved?: approved only if a valid score >= 80 and no blocking issue.
 
-    Blocking: a critical or high ReviewAgent issue, a placeholder, a request-constraint failure, a malformed
-    review. A missed word-count target (issue #9) and a requirement the reviewer marks failed are high issues
-    that guide the reviser but do not block, as in the harness.
+    Blocking, as in the harness: a critical ReviewAgent issue, a placeholder, a request-constraint failure, a
+    malformed review. Everything the reviewer rates high (and a missed word-count target, issue #9, and a
+    requirement it marks failed) guides the reviser but does not block. Executions 402-409: reviewer high
+    issues were often wrong and escalated good drafts, so they stopped blocking.
     """
 
     def verdict(self, score=90, issues=None, placeholder=False, length_ok=True, failures=None,
@@ -149,13 +150,21 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(self.verdict()[0])
         self.assertEqual(self.issues, [])
 
-    def test_high_severity_issue_blocks_approval_execution_380(self):
-        issue = {"severity": "high", "description": "wrong year", "suggested_fix": "fix"}
-        self.assertFalse(self.verdict(score=86, issues=[issue])[0])
+    def test_a_high_issue_guides_the_reviser_but_does_not_block(self):
+        issue = {"severity": "high", "description": "thin on tone", "suggested_fix": "fix"}
+        approved, issues = self.verdict(score=86, issues=[issue])
+        self.assertTrue(approved)
+        self.assertEqual([i["blocking"] for i in issues], [False])
+
+    def test_a_critical_issue_blocks_approval(self):
+        issue = {"severity": "critical", "description": "invented statistic", "suggested_fix": "fix"}
+        approved, issues = self.verdict(score=95, issues=[issue])
+        self.assertFalse(approved)
+        self.assertEqual([i["blocking"] for i in issues], [True])
 
     def test_severity_case_is_ignored(self):
-        issue = {"severity": "HIGH", "description": "d", "suggested_fix": "f"}
-        self.assertFalse(self.verdict(issues=[issue])[0])
+        self.assertFalse(self.verdict(issues=[{"severity": "CRITICAL", "description": "d", "suggested_fix": "f"}])[0])
+        self.assertTrue(self.verdict(issues=[{"severity": "HIGH", "description": "d", "suggested_fix": "f"}])[0])
 
     def test_medium_and_low_issues_do_not_block(self):
         issues = [{"severity": "medium", "description": "d", "suggested_fix": "f"},
@@ -300,7 +309,8 @@ class PromptAndReplyTests(unittest.TestCase):
 
     def test_review_prompt_matches_the_new_gate(self):
         text = self.nodes["ReviewAgent"]["parameters"]["text"]
-        self.assertIn("critical or high", text)
+        self.assertIn("no issue is critical", text)
+        self.assertNotIn("critical or high", text)
         self.assertIn("constraint_failures", text)
         self.assertNotIn("non-critical issues do not block approval", text)
 
@@ -311,12 +321,12 @@ class PromptAndReplyTests(unittest.TestCase):
         self.assertIn("substring(0, 3900)", text)
         self.assertTrue(text.startswith("={{ ('Approved"))
 
-    def test_escalation_messages_describe_the_stricter_gate(self):
+    def test_escalation_messages_describe_the_gate(self):
         body = self.nodes["Respond Escalated"]["parameters"]["responseBody"]
         tg = self.nodes["Telegram Reply Escalated"]["parameters"]["text"]
         for text in (body, tg):
-            self.assertIn("critical or high", text)
-            self.assertIn("missed word count does not block", text)
+            self.assertIn("no critical issue", text)
+            self.assertNotIn("critical or high", text)
 
     @unittest.skipUnless(NODE, "node is required to evaluate n8n expressions")
     def test_escalated_telegram_reply_lists_blocking_issues_first(self):
@@ -442,7 +452,8 @@ class ReviewFindingsTests(unittest.TestCase):
     # -- finding 3: ReviewAgent system message must match the gate -------------------------
     def test_review_system_message_agrees_with_the_gate(self):
         msg = _nodes()["ReviewAgent"]["parameters"]["messages"]["messageValues"][0]["message"]
-        self.assertIn("critical or high", msg)
+        self.assertIn("none of your issues is critical", msg)
+        self.assertNotIn("critical or high", msg)
         self.assertNotIn("do NOT block approval", msg)
         self.assertNotIn("even if non-critical issues remain", msg)
         # output fields the Review Parser schema does not have
