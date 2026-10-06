@@ -2,8 +2,8 @@
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker><marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#dc2626"/></marker><marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ea580c"/></marker></defs>
 <rect width="2340" height="1010" fill="#f8fafc"/>
 <text x="40" y="46" font-size="24" fill="#0f172a" font-weight="700">DraftStudio — n8n Workflow Architecture</text>
-<text x="40" y="70" font-size="13" fill="#64748b">Built-in n8n nodes only · solid = data flow · dashed = tool or optional · red = revision loop and escalation · orange = agent error output · blue = Telegram</text>
-<text x="40" y="90" font-size="13" fill="#64748b">Approve at score ≥ 80 with no critical or high issue, no placeholder, length ok and every stated constraint met · max 3 revision cycles</text>
+<text x="40" y="70" font-size="13" fill="#64748b">Built-in n8n nodes only (no Code node) · solid = data flow · dashed = tool or optional · red = revision loop and escalation · orange = agent error output · blue = Telegram</text>
+<text x="40" y="90" font-size="13" fill="#64748b">Approved at score ≥ 80 with no blocking issue (critical reviewer issue, placeholder, failed request constraint, malformed review) · high issues, a missed length and failed requirements guide the reviser · max 3 revision cycles</text>
 <rect x="40" y="300" width="150" height="40" rx="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
 <text x="115.0" y="316.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Webhook</text>
 <text x="115.0" y="332.0" font-size="11" fill="#64748b" text-anchor="middle">POST · Header Auth</text>
@@ -35,27 +35,31 @@
 <rect x="970" y="340" width="160" height="80" rx="12" fill="#fef9c3" stroke="#eab308" stroke-width="2"/>
 <text x="1050.0" y="378.0" font-size="14" fill="#713f12" font-weight="600" text-anchor="middle">DraftAgent</text>
 <text x="1050.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<text x="1050.0" y="411.0" font-size="11" fill="#64748b" text-anchor="middle">brief + dossier + sources</text>
 <path d="M1130 380 H1180" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <rect x="1180" y="355" width="140" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
 <text x="1250.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Deterministic Checks</text>
-<text x="1250.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields · constraints</text>
+<text x="1250.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields · 6 checks</text>
 <path d="M1320 380 H1370" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <rect x="1370" y="340" width="170" height="80" rx="12" fill="#fae8ff" stroke="#c026d3" stroke-width="2"/>
 <text x="1455.0" y="378.0" font-size="14" fill="#701a75" font-weight="600" text-anchor="middle">ReviewAgent</text>
 <text x="1455.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<text x="1455.0" y="411.0" font-size="11" fill="#64748b" text-anchor="middle">dossier + check results</text>
 <path d="M1540 380 H1590" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <rect x="1590" y="355" width="120" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
 <text x="1650.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Compute Verdict</text>
-<text x="1650.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields</text>
+<text x="1650.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields · gate</text>
 <path d="M1710 380 H1760" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <rect x="1760" y="355" width="110" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/>
 <text x="1815.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Approved?</text>
 <text x="1815.0" y="392.0" font-size="11" fill="#64748b" text-anchor="middle">IF</text>
 <path d="M1870 380 H1920" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <text x="1895" y="372" font-size="10" fill="#475569" text-anchor="middle">yes</text>
+<text x="775" y="372" font-size="10" fill="#475569" text-anchor="middle">no</text>
 <rect x="1920" y="340" width="160" height="80" rx="12" fill="#ffedd5" stroke="#f97316" stroke-width="2"/>
 <text x="2000.0" y="378.0" font-size="14" fill="#7c2d12" font-weight="600" text-anchor="middle">DispatchAgent</text>
 <text x="2000.0" y="395.0" font-size="11" fill="#64748b" text-anchor="middle">Basic LLM Chain</text>
+<text x="2000.0" y="411.0" font-size="11" fill="#64748b" text-anchor="middle">package + source list</text>
 <path d="M2080 380 H2130" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <rect x="2130" y="355" width="150" height="50" rx="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
 <text x="2205.0" y="376.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Respond Delivered</text>
@@ -64,21 +68,32 @@
 <text x="2205.0" y="476.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Telegram reply</text>
 <text x="2205.0" y="492.0" font-size="11" fill="#64748b" text-anchor="middle">1 to 3 messages, if chat_id</text>
 <path d="M2205 405 V455" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
-<rect x="730" y="190" width="160" height="70" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
-<text x="810.0" y="223.0" font-size="14" fill="#14532d" font-weight="600" text-anchor="middle">ResearchAgent</text>
-<text x="810.0" y="240.0" font-size="11" fill="#64748b" text-anchor="middle">AI Agent</text>
-<rect x="690" y="105" width="100" height="36" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
-<text x="740.0" y="119.0" font-size="12" fill="#14532d" font-weight="600" text-anchor="middle">Wikipedia</text>
-<text x="740.0" y="135.0" font-size="11" fill="#64748b" text-anchor="middle">tool</text>
-<rect x="830" y="105" width="100" height="36" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
-<text x="880.0" y="119.0" font-size="12" fill="#14532d" font-weight="600" text-anchor="middle">Tavily Search</text>
-<text x="880.0" y="135.0" font-size="11" fill="#64748b" text-anchor="middle">tool (off in dev)</text>
-<path d="M690 355 V225 H730" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<rect x="720" y="190" width="220" height="70" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+<text x="830.0" y="223.0" font-size="14" fill="#14532d" font-weight="600" text-anchor="middle">ResearchAgent</text>
+<text x="830.0" y="240.0" font-size="11" fill="#64748b" text-anchor="middle">AI Agent · max 6 tool calls</text>
+<rect x="700" y="105" width="130" height="36" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+<text x="765.0" y="119.0" font-size="12" fill="#14532d" font-weight="600" text-anchor="middle">Wikipedia Search</text>
+<text x="765.0" y="135.0" font-size="11" fill="#64748b" text-anchor="middle">HTTP Request tool</text>
+<rect x="850" y="105" width="130" height="36" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+<text x="915.0" y="119.0" font-size="12" fill="#14532d" font-weight="600" text-anchor="middle">Tavily Search</text>
+<text x="915.0" y="135.0" font-size="11" fill="#64748b" text-anchor="middle">tool · header auth</text>
+<path d="M690 355 V225 H720" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
 <text x="640" y="300" font-size="12" fill="#475569">research</text>
-<path d="M850 260 V355" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
-<text x="856" y="312" font-size="12" fill="#475569">dossier (none if research errors)</text>
-<path d="M740 141 V190" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
-<path d="M880 141 V190" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<path d="M765 141 V190" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<path d="M915 141 V190" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<path d="M940 230 H1000" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<rect x="1000" y="205" width="140" height="50" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+<text x="1070.0" y="226.0" font-size="12" fill="#14532d" font-weight="600" text-anchor="middle">Verify Research</text>
+<text x="1070.0" y="242.0" font-size="11" fill="#64748b" text-anchor="middle">Edit Fields · sources</text>
+<path d="M1070 255 V300 H880 V355" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
+<text x="890" y="318" font-size="12" fill="#475569">verified dossier + sources (findings with no tool-returned URL dropped)</text>
+<path d="M830 260 V355" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#o)"/>
+<text x="822" y="336" font-size="11" fill="#ea580c" text-anchor="end">error: no dossier</text>
+<text x="1650" y="440" font-size="11" fill="#475569" text-anchor="middle">blocks: critical issue,</text>
+<text x="1650" y="453" font-size="11" fill="#475569" text-anchor="middle">placeholder, failed constraint,</text>
+<text x="1650" y="466" font-size="11" fill="#475569" text-anchor="middle">malformed review</text>
+<text x="1650" y="482" font-size="11" fill="#475569" text-anchor="middle">guides only: high, medium,</text>
+<text x="1650" y="495" font-size="11" fill="#475569" text-anchor="middle">length, failed requirement</text>
 <rect x="1755" y="500" width="120" height="50" rx="12" fill="#ccfbf1" stroke="#14b8a6" stroke-width="2"/>
 <text x="1815.0" y="521.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Rounds Left?</text>
 <text x="1815.0" y="537.0" font-size="11" fill="#64748b" text-anchor="middle">IF  round &lt; 3</text>
@@ -86,7 +101,7 @@
 <text x="1823" y="455" font-size="12" fill="#dc2626">not approved</text>
 <rect x="1340" y="500" width="140" height="50" rx="12" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
 <text x="1410.0" y="521.0" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Prepare Revision</text>
-<text x="1410.0" y="537.0" font-size="11" fill="#64748b" text-anchor="middle">round + 1</text>
+<text x="1410.0" y="537.0" font-size="11" fill="#64748b" text-anchor="middle">round+1 · issues, sources</text>
 <path d="M1755 525 H1480" fill="none" stroke="#dc2626" stroke-width="2" marker-end="url(#r)"/>
 <text x="1617" y="517" font-size="12" fill="#dc2626" text-anchor="middle">yes: next cycle</text>
 <path d="M1340 525 H1050 V420" fill="none" stroke="#dc2626" stroke-width="2" marker-end="url(#r)"/>
@@ -129,6 +144,6 @@
 <path d="M950 855 H1010" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a)"/>
 <rect x="40" y="910" width="2260" height="80" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="6 4" stroke-width="2"/>
 <text x="60" y="934" font-size="12" fill="#475569">Models: Groq openai/gpt-oss-120b (Intake, Research, Draft, Dispatch) with OpenRouter openai/gpt-oss-20b fallback · ReviewAgent: OpenRouter qwen/qwen3-235b-a22b-2507 with Groq llama-3.3-70b-versatile fallback · every agent has two providers · retries 5 × 5 s per agent</text>
-<text x="60" y="955" font-size="12" fill="#475569">Checks and verdict use Edit Fields + IF expressions only (no Code node) · Structured Output Parser on Intake, Draft, Review, Dispatch · long Telegram deliverables are sent in up to 3 messages</text>
-<text x="60" y="976" font-size="12" fill="#dc2626">Before activating: create the DraftStudio Webhook credential (Header Auth, X-API-Key) and set the Telegram chat-id allowlist. Webhook auth and the stricter gate live-tested on n8n 2.x; the Groq reviewer fallback and failure branches are not yet run live.</text>
+<text x="60" y="955" font-size="12" fill="#475569">Deterministic Checks (length, key points, citations, format, placeholders, request constraints) and the verdict are Edit Fields + IF expressions tested against harness/checks.py · Structured Output Parser on Intake, Draft, Review, Dispatch · long Telegram deliverables go out in up to 3 messages</text>
+<text x="60" y="976" font-size="12" fill="#dc2626">Before activating: create the credentials DraftStudio Webhook (Header Auth, X-API-Key), DraftStudio Tavily (Header Auth, Authorization: Bearer key) and DraftStudio Telegram, and set the Telegram chat-id allowlist. Webhook runs live-tested on n8n 2.20; Telegram replies and the Groq reviewer fallback not yet run live on this version.</text>
 </svg>

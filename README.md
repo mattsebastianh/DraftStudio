@@ -31,7 +31,7 @@ All agents are built with [claude-code](https://claude.com/claude-code) and powe
 
 ![DraftStudio agent pipeline architecture](assets/01_pipeline_architecture_groq_harness.svg)
 
-Research is optional: IntakeAgent routes straight to DraftAgent when the brief needs none, and DraftAgent or ReviewAgent can request more mid-flow (dashed). Red lines are the revision loop (score < 80, max 3 cycles) and human escalation. The n8n version of the same pipeline, with its Telegram entry and reply, error branches and stricter gate:
+Research is optional: IntakeAgent routes straight to DraftAgent when the brief needs none, and DraftAgent or ReviewAgent can request more mid-flow (dashed). Red lines are the revision loop (score < 80, max 3 cycles) and human escalation. The n8n version of the same pipeline, with its Telegram entry and reply, error branches, research verification, deterministic checks and the gate:
 
 ![DraftStudio n8n workflow architecture](assets/02_pipeline_architecture_n8n.svg)
 
@@ -122,7 +122,17 @@ The harness retries transient errors (TPM 429s, 5xx), falls back to `GROQ_FALLBA
 
 The same pipeline also exists as an importable n8n workflow, `n8n/draftstudio_pipeline.workflow.json`, triggered by a webhook, a manual test input or a Telegram bot, with the harness's blocking rule (a score of at least 80 and no `critical` issue) plus extra deterministic checks: placeholder text and explicit request constraints (a closing sentence, an exact word count, a minimum number of bullets) block approval, while length, key points, citations and markdown format guide the reviser without blocking. Research findings are kept only if they cite a page the search tools returned. The webhook requires a Header Auth key, and every agent has two LLM providers (Groq and OpenRouter, each the other's fallback). Check the file with `python3 scripts/validate_n8n_workflow.py n8n/draftstudio_pipeline.workflow.json`.
 
-The workflow as it looks on the n8n canvas after import:
+What to set up in n8n after importing it (credentials are referenced by name only, with the placeholder id `REPLACE_ME`, so each node asks you to pick yours):
+
+| Credential | Type | Used by |
+|---|---|---|
+| `DraftStudio Webhook` | Header Auth (`X-API-Key`, a long random value) | the Webhook node |
+| `DraftStudio Tavily` | Header Auth (`Authorization: Bearer <Tavily key>`) | Tavily Search; without a key, disable that node and research still has Wikipedia Search |
+| Groq, OpenRouter, Telegram (optional) | their own types | the model nodes and the Telegram nodes |
+
+n8n does not read `.env`: the keys above go into n8n's credential store, and the Telegram chat-id allowlist is set on the trigger node. Research uses two tools: Wikipedia Search (an HTTP Request tool with a descriptive User-Agent, because Wikipedia answers the built-in tool with HTTP 429) and Tavily Search. The workflow's prompts are copies of `agents/*/system_prompt.txt` and its checks are ports of `harness/checks.py`; unit tests fail when either drifts (see `n8n/verify_notes.md` for node verification and live-run findings).
+
+The workflow as it looked on the n8n canvas after import (an earlier version: it predates the research verification step and the Wikipedia Search tool, see the diagram above for the current one):
 
 ![DraftStudio pipeline on the n8n canvas](assets/n8n_flow_01.png)
 
@@ -157,7 +167,7 @@ All 5 agents are built, reviewed, pipeline-tested, and **active**. The full wire
 
 **n8n workflow:** run live on a local n8n 2.20.11, first in the original version (Telegram in and out, the revision loop, a Groq 429 with model fallback, webhook authentication) and then, as a separate copy, in its modernized form (prompts and schemas following `agents/*`, the harness checks as expressions, the research verification, a Wikipedia Search HTTP tool and Tavily): approved first drafts, revision rounds and escalations were all observed. Not yet run live on the modernized copy: the Telegram replies and the Groq reviewer fallback (Groq answered 403 during the tests, so every agent ran on its OpenRouter fallback). Node verification notes and the live-run findings are in `n8n/verify_notes.md`.
 
-**Provider fallback:** the harness switches to OpenRouter when Groq fails (checked live by forcing an invalid Groq key) and the n8n workflow gives every agent two providers. The unit tests (`.venv/bin/pytest`) cover the wiring, the wire contracts, the harness fallbacks and the review checks.
+**Provider fallback:** the harness switches to OpenRouter when Groq fails (checked live by forcing an invalid Groq key) and the n8n workflow gives every agent two providers. The unit tests (`.venv/bin/pytest`) cover the wiring, the wire contracts, the harness fallbacks and the review checks. The n8n expression tests run the workflow's own expressions in Node.js, so they need `node` installed (they fail without it; set `DRAFTSTUDIO_SKIP_NODE_TESTS=1` to skip them on purpose).
 
 Planned work: priority handling at intake, `client_id` propagation, multi-channel delivery, structured word-count limits from IntakeAgent, and a second web-search provider behind the same tool interface.
 
