@@ -33,3 +33,6 @@ node_modules/
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Local n8n workflow backups (hold real credential ids)
+/backups_n8n/
